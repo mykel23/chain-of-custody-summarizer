@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chain-of-Custody Log Summarizer</title>
+<style>
+  :root {
+    --bg: #f4f6f7; --panel: #ffffff; --ink: #1a1d1f; --muted: #646b70;
+    --line: #dde2e5; --accent: #0f766e; --accent-ink: #ffffff; --accent-soft: #e3f3f1;
+    --crit: #b91c1c; --crit-soft: #fdecec; --warn: #b45309; --warn-soft: #fdf3e3; --ok: #047857; --ok-soft: #e4f5ee; --soft: #f9fafa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121516; --panel: #1b1f21; --ink: #e8ecee; --muted: #9aa3a8;
+      --line: #2f3639; --accent: #2dd4bf; --accent-ink: #062320; --accent-soft: #14302d;
+      --crit: #f87171; --crit-soft: #3a1c1c; --warn: #fbbf24; --warn-soft: #3a2c12; --ok: #34d399; --ok-soft: #12302a; --soft: #22282a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 32px 16px 64px; }
+  .eyebrow { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); margin: 0 0 4px; }
+  h1 { margin: 0 0 4px; font-size: 1.75rem; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); max-width: 720px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-top: 20px; }
+  label, .label { display: block; font-weight: 600; margin-bottom: 6px; }
+  .hint { color: var(--muted); font-size: 0.875rem; font-weight: 400; }
+  input[type=password], input[type=text], input[type=number], input[type=date], textarea, select {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); color: var(--ink); font: inherit; }
+  textarea { min-height: 220px; resize: vertical; font: 0.9rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+  .grid2, .grid3 { display: grid; gap: 16px; }
+  .grid2 { grid-template-columns: 1fr 1fr; } .grid3 { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 720px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+  button, .filebtn { font: inherit; font-weight: 600; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; display: inline-block; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button.small, .filebtn.small { padding: 6px 12px; font-size: 0.9rem; }
+  button:disabled { opacity: 0.55; cursor: not-allowed; }
+  .status { color: var(--muted); font-size: 0.9rem; }
+  .error { color: var(--crit); }
+  .notice { background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; font-size: 0.9rem; margin-top: 12px; }
+  h2 { font-size: 1.15rem; margin: 0 0 10px; }
+  h3 { font-size: 1rem; margin: 0; }
+  details > summary { cursor: pointer; font-weight: 700; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.93rem; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); white-space: nowrap; }
+  .pill { display: inline-block; font-size: 0.76rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+  .sev-critical { background: var(--crit); color: #fff; }
+  .sev-warning { background: var(--warn-soft); color: var(--warn); border: 1px solid currentColor; }
+  .sev-info { background: var(--soft); color: var(--muted); border: 1px solid var(--line); }
+  .st-clean { background: var(--ok-soft); color: var(--ok); }
+  .st-review { background: var(--warn-soft); color: var(--warn); }
+  .st-critical { background: var(--crit-soft); color: var(--crit); }
+  .src { font-size: 0.75rem; color: var(--muted); display: block; }
+  .stats { display: flex; gap: 12px; flex-wrap: wrap; }
+  .stat { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; min-width: 130px; background: var(--soft); }
+  .stat b { display: block; font-size: 1.6rem; line-height: 1.1; }
+  .stat span { color: var(--muted); font-size: 0.85rem; }
+  .stat.crit b { color: var(--crit); } .stat.warn b { color: var(--warn); } .stat.ok b { color: var(--ok); }
+  .ship { border: 1px solid var(--line); border-radius: 10px; margin-top: 14px; overflow: hidden; }
+  .ship-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; padding: 12px 14px; background: var(--soft); border-bottom: 1px solid var(--line); }
+  .ship-head .meta { color: var(--muted); font-size: 0.88rem; }
+  ol.timeline { list-style: none; margin: 0; padding: 6px 14px 12px; }
+  ol.timeline li { display: grid; grid-template-columns: 70px 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); position: relative; }
+  ol.timeline li:last-child { border-bottom: none; }
+  .t-time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.88rem; padding-top: 1px; }
+  .t-type { font-weight: 700; text-transform: capitalize; }
+  .t-detail { color: var(--muted); font-size: 0.9rem; }
+  .chip { display: inline-block; font-size: 0.78rem; font-weight: 700; padding: 1px 7px; border-radius: 6px; margin-left: 6px; border: 1px solid var(--line); }
+  .chip.bad { background: var(--crit); color: #fff; border-color: var(--crit); }
+  .chip.okc { color: var(--ok); }
+  .flag { color: var(--crit); font-weight: 700; font-size: 0.85rem; }
+  .flag.w { color: var(--warn); }
+  .gapnote { color: var(--warn); font-size: 0.85rem; font-style: italic; grid-column: 2; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  footer { margin-top: 28px; color: var(--muted); font-size: 0.85rem; }
+  [hidden] { display: none !important; }
+  @media print {
+    body { background: #fff; color: #000; }
+    .noprint { display: none !important; }
+    .panel, .ship { border-color: #ccc; break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow" id="eyebrow">Chain of custody</p>
+    <h1>Delivery Log → Custody Report</h1>
+    <p>Paste or upload messy courier, specimen or cold-chain logs. Claude organizes them into a timeline for each shipment, and the page checks every rule: temperature, signatures, custody handoffs, unaccounted time and late delivery.</p>
+  </header>
+
+  <!-- Input -->
+  <section class="panel noprint">
+    <div class="grid2">
+      <div>
+        <label for="key">Claude API key <span class="hint">— stays in this tab, never saved</span></label>
+        <input id="key" type="password" placeholder="sk-ant-..." autocomplete="off">
+      </div>
+      <div>
+        <label for="orgType">What kind of work is this?</label>
+        <select id="orgType"></select>
+      </div>
+    </div>
+
+    <label for="log" style="margin-top:16px">Delivery or custody log <span class="hint">— driver notes, scan exports, temperature logs, CSV, anything</span></label>
+    <textarea id="log" spellcheck="false" placeholder="Paste log text here, or upload a .csv / .txt file. Times without dates use the log date below."></textarea>
+    <div class="row" style="margin-top:8px">
+      <label class="filebtn small" style="margin:0">Upload a file<input id="file" type="file" accept=".csv,.txt,.log,.tsv,text/plain,text/csv" hidden></label>
+      <span class="hint" id="fileNote"></span>
+    </div>
+    <div class="notice" id="privacy">Don't paste patient names or other protected health information. Order, specimen or route IDs work fine.</div>
+
+    <div class="grid3" style="margin-top:16px">
+      <div>
+        <label for="logDate">Log date</label>
+        <input id="logDate" type="date">
+      </div>
+      <div>
+        <label for="maxGap">Flag unaccounted time over <span class="hint">(minutes)</span></label>
+        <input id="maxGap" type="number" min="5" max="1440" step="5" value="90">
+      </div>
+      <div>
+        <label for="lateGrace">Late after due time by <span class="hint">(minutes)</span></label>
+        <input id="lateGrace" type="number" min="0" max="240" step="5" value="0">
+      </div>
+    </div>
+
+    <details style="margin-top:14px">
+      <summary>Temperature ranges <span class="hint" id="rangeSummary"></span></summary>
+      <div class="table-wrap" style="margin-top:10px">
+        <table>
+          <thead><tr><th>Category</th><th>Min °C</th><th>Max °C</th></tr></thead>
+          <tbody id="ranges"></tbody>
+        </table>
+      </div>
+      <p class="hint" style="margin:8px 0 0">Leave a box empty for no limit. Readings in °F are converted automatically. Check these against your own SOPs.</p>
+    </details>
+
+    <div class="row">
+      <button class="primary" id="run">Build custody report</button>
+      <button id="sample">Load sample log</button>
+      <button id="demo">See demo report (no key needed)</button>
+      <span class="status" id="status" role="status"></span>
+    </div>
+  </section>
+
+  <!-- Report -->
+  <section id="report" hidden>
+    <div class="panel">
+      <div class="row" style="margin-top:0; justify-content:space-between">
+        <h2 style="margin:0">Custody report <span class="hint" id="reportMeta"></span></h2>
+        <div class="btns noprint">
+          <button class="small" id="copyReport">Copy incident report</button>
+          <button class="small" id="emailReport">Email to supervisor</button>
+          <button class="small" id="csvExceptions">Exceptions CSV</button>
+          <button class="small" id="csvTimeline">Full timeline CSV</button>
+          <button class="small" id="print">Print / save PDF</button>
+        </div>
+      </div>
+      <div class="stats" id="stats" style="margin-top:14px"></div>
+      <p id="summary" style="margin:14px 0 0"></p>
+    </div>
+
+    <div class="panel">
+      <h2>Exceptions <span class="hint">— most serious first</span></h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Severity</th><th>Shipment</th><th>Issue</th><th>When</th></tr></thead>
+          <tbody id="exceptions"></tbody>
+        </table>
+      </div>
+      <p class="hint" style="margin:10px 0 0">"Rule check" items are calculated by the page from the timeline. "Noted in log" items are things Claude spotted in the text, like a broken seal, which no rule can measure.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Shipment timelines</h2>
+      <div id="shipments"></div>
+    </div>
+  </section>
+
+  <footer>Built with the Claude API. Logs go straight from your browser to Anthropic's API and are never stored. Rule results are only as accurate as the log; always confirm critical findings against the original records.</footer>
+</div>
+
+<script>
+const MODEL = "claude-sonnet-5-5";
+
+/* ======================================================================
+   Organization presets: wording + default temperature ranges (°C)
+   ====================================================================== */
+const CATEGORIES = {
+  refrigerated: "Refrigerated",
+  frozen: "Frozen",
+  ambient: "Room temperature",
+  controlled: "Controlled substance",
+  specimen: "Lab specimen (ambient)",
+  other: "Other / not temperature-controlled"
+};
+const DEFAULT_RANGES = {
+  refrigerated: [2, 8], frozen: [null, -15], ambient: [15, 30], controlled: [15, 30], specimen: [15, 30], other: [null, null]
+};
+const ORG_TYPES = {
+  medical: { label: "Medical courier (specimens, pharmacy, radiopharmaceuticals)", eyebrow: "Medical courier",
+    guidance: "This is a medical courier. Shipments include lab specimens, pharmacy orders and radiopharmaceuticals. Treat chain-of-custody signatures, temperature control and STAT/time-critical deliveries as the most important details." },
+  lab: { label: "Clinical lab specimen transport", eyebrow: "Specimen transport",
+    guidance: "This is clinical lab specimen transport. Specimen integrity, temperature, and an unbroken signed chain of custody are critical; note any leaks, broken seals or mislabeled containers." },
+  pharmacy: { label: "Pharmacy delivery", eyebrow: "Pharmacy delivery",
+    guidance: "This is pharmacy delivery. Refrigerated medications and controlled substances need signed handoffs and temperature control; note any ID checks or refused deliveries." },
+  food: { label: "Food bank or pantry cold chain", eyebrow: "Food cold chain",
+    guidance: "This is a food bank cold chain. Perishable donations (dairy, meat, produce) must stay in temperature range from pickup to storage; note door-open times, spoilage, or rejected loads." },
+  general: { label: "General logistics", eyebrow: "Chain of custody", guidance: "" }
+};
+
+/* ======================================================================
+   Sample log + demo extraction (what Claude would return for it)
+   ====================================================================== */
+const SAMPLE_LOG = `Route 14 - Tue - driver: J. Ortiz
+SHIP A-2291 Lab specimens (ambient) Westside Clinic -> Gulf Coast Reference Lab, due 11:00
+07:42 picked up at Westside Clinic, 3 bags sealed, signed by front desk (R. Lee). Temp 72F
+08:05 at Midtown Clinic, also picked up B-1188 (refrigerated insulin, due 10:30, to Eastwood Pharmacy). B-1188 cooler 41F, signed by M. Grant
+09:55 dropped B-1188 at Eastwood Pharmacy. cooler read 49F at drop!! pharmacist A. Shah signed
+10:40 A-2291 handed to Lab courier hub - T. Nguyen took it, no signature, hub busy
+11:35 Gulf Coast Ref Lab received A-2291, signed K. Patel. one bag seal looked torn
+
+SHIP C-3070 Frozen plasma, Memorial Hospital -> Regional Blood Center, due 13:00
+11:50 pickup Memorial Hosp, dry ice cooler -22C, signed D. Brooks
+12:40 delivered Regional Blood Center, -20C, signed by receiving (L. Cho)`;
+
+function demoExtraction(d) {
+  const t = (hm) => `${d}T${hm}`;
+  return {
+    summary: "Three shipments on Route 14. The insulin delivery to Eastwood Pharmacy reached 49°F (9.4°C) at drop-off, above the refrigerated range. Specimen shipment A-2291 changed hands at the courier hub without a signature, arrived late, and one bag seal looked torn. The frozen plasma shipment was clean.",
+    shipments: [
+      { id: "A-2291", item: "Lab specimens, 3 sealed bags", category: "specimen", origin: "Westside Clinic", destination: "Gulf Coast Reference Lab", due: t("11:00"),
+        events: [
+          { time: t("07:42"), type: "pickup", location: "Westside Clinic", from: "R. Lee", to: "J. Ortiz", signed: true, temp: 72, temp_unit: "F", note: "3 bags sealed" },
+          { time: t("10:40"), type: "handoff", location: "Lab courier hub", from: "J. Ortiz", to: "T. Nguyen", signed: false, temp: null, temp_unit: null, note: "No signature, hub busy" },
+          { time: t("11:35"), type: "delivery", location: "Gulf Coast Reference Lab", from: "T. Nguyen", to: "K. Patel", signed: true, temp: null, temp_unit: null, note: "One bag seal looked torn" }
+        ] },
+      { id: "B-1188", item: "Insulin", category: "refrigerated", origin: "Midtown Clinic", destination: "Eastwood Pharmacy", due: t("10:30"),
+        events: [
+          { time: t("08:05"), type: "pickup", location: "Midtown Clinic", from: "M. Grant", to: "J. Ortiz", signed: true, temp: 41, temp_unit: "F", note: null },
+          { time: t("09:55"), type: "delivery", location: "Eastwood Pharmacy", from: "J. Ortiz", to: "A. Shah", signed: true, temp: 49, temp_unit: "F", note: "Cooler read 49F at drop" }
+        ] },
+      { id: "C-3070", item: "Frozen plasma", category: "frozen", origin: "Memorial Hospital", destination: "Regional Blood Center", due: t("13:00"),
+        events: [
+          { time: t("11:50"), type: "pickup", location: "Memorial Hospital", from: "D. Brooks", to: "J. Ortiz", signed: true, temp: -22, temp_unit: "C", note: "Dry ice cooler" },
+          { time: t("12:40"), type: "delivery", location: "Regional Blood Center", from: "J. Ortiz", to: "L. Cho", signed: true, temp: -20, temp_unit: "C", note: null }
+        ] }
+    ],
+    observations: [
+      { shipment_id: "A-2291", severity: "critical", issue: "One specimen bag seal looked torn at delivery", time: t("11:35") }
+    ]
+  };
+}
+
+/* ======================================================================
+   Helpers
+   ====================================================================== */
+const $ = (id) => document.getElementById(id);
+let ranges = JSON.parse(JSON.stringify(DEFAULT_RANGES));
+let report = null; // { data, findings, isDemo }
+
+function setStatus(msg, isError = false) { $("status").textContent = msg; $("status").classList.toggle("error", isError); }
+function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function isoToday() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
+function readStore(k, f) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? f; } catch { return f; } }
+function writeStore(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+function validTime(s) { return typeof s === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s); }
+function toMs(s) { return validTime(s) ? Date.parse(s.slice(0, 16) + ":00") : NaN; }   // treated as local time
+function hhmm(s) { return validTime(s) ? s.slice(11, 16) : "—"; }
+function niceTime(s) {
+  if (!validTime(s)) return "—";
+  const d = new Date(toMs(s));
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " " + s.slice(11, 16);
+}
+function mins(n) { const h = Math.floor(n / 60), m = Math.round(n % 60); return h ? `${h}h ${m}m` : `${m}m`; }
+function toC(temp, unit) {
+  if (typeof temp !== "number" || !isFinite(temp)) return null;
+  return String(unit || "C").toUpperCase().startsWith("F") ? (temp - 32) * 5 / 9 : temp;
+}
+function fmtTemp(temp, unit) {
+  const c = toC(temp, unit); if (c === null) return "";
+  const u = String(unit || "C").toUpperCase().startsWith("F") ? "F" : "C";
+  return u === "F" ? `${temp}°F (${c.toFixed(1)}°C)` : `${temp}°C`;
+}
+function sameName(a, b) { return String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase(); }
+
+/* ======================================================================
+   Rule engine — everything here is calculated, never guessed by the model
+   ====================================================================== */
+const SEV_RANK = { critical: 0, warning: 1, info: 2 };
+
+function checkShipment(s, opts) {
+  const out = [];
+  const add = (severity, issue, time, rule) => out.push({ shipment: s.id, severity, issue, time: time || null, source: "rule", rule });
+  const evs = [...(s.events || [])].filter(e => validTime(e.time)).sort((a, b) => toMs(a.time) - toMs(b.time));
+  const [lo, hi] = opts.ranges[s.category] || [null, null];
+  const tempControlled = lo !== null || hi !== null;
+
+  if (!evs.length) { add("critical", "No timestamped events found for this shipment", null, "no-events"); return { out, evs, flags: new Map() }; }
+
+  const flags = new Map();   // event index -> list of {sev, text}
+  const flag = (i, sev, text) => { if (!flags.has(i)) flags.set(i, []); flags.get(i).push({ sev, text }); };
+
+  // 1. Temperature excursions
+  let tempReadings = 0;
+  evs.forEach((e, i) => {
+    const c = toC(e.temp, e.temp_unit); if (c === null) return;
+    tempReadings++;
+    if (lo !== null && c < lo) { add("critical", `Temperature ${fmtTemp(e.temp, e.temp_unit)} is below the ${CATEGORIES[s.category].toLowerCase()} minimum of ${lo}°C`, e.time, "temp-low"); flag(i, "c", `Below ${lo}°C`); }
+    if (hi !== null && c > hi) { add("critical", `Temperature ${fmtTemp(e.temp, e.temp_unit)} is above the ${CATEGORIES[s.category].toLowerCase()} maximum of ${hi}°C`, e.time, "temp-high"); flag(i, "c", `Above ${hi}°C`); }
+  });
+  if (tempControlled && tempReadings === 0) add("warning", `No temperature readings recorded for a ${CATEGORIES[s.category].toLowerCase()} shipment`, null, "temp-missing");
+  else if (tempControlled && tempReadings === 1) add("info", "Only one temperature reading recorded; consider logging at pickup and delivery", null, "temp-single");
+
+  // 2. Custody: signatures and breaks in who holds it
+  let custodian = null;
+  evs.forEach((e, i) => {
+    const type = e.type;
+    if (type === "pickup" || type === "handoff" || type === "delivery") {
+      if (e.signed === false) {
+        add("critical", `${type === "delivery" ? "Delivery" : type === "pickup" ? "Pickup" : "Handoff"} ${e.from ? `from ${e.from} ` : ""}${e.to ? `to ${e.to} ` : ""}was not signed`, e.time, "unsigned");
+        flag(i, "c", "No signature");
+      } else if (e.signed !== true) {
+        add("warning", `${type === "delivery" ? "Delivery" : type === "pickup" ? "Pickup" : "Handoff"} at ${e.location || "unknown location"} has no signature recorded`, e.time, "signature-unknown");
+        flag(i, "w", "Signature not recorded");
+      }
+      if (custodian && e.from && !sameName(e.from, custodian) && type !== "pickup") {
+        add("critical", `Custody break: log shows ${custodian} holding it, but ${e.from} handed it over`, e.time, "custody-break");
+        flag(i, "c", "Custody break");
+      }
+      if (e.to) custodian = e.to;
+    } else if (e.handler && custodian && !sameName(e.handler, custodian)) {
+      add("critical", `Custody break: ${e.handler} had it with no recorded handoff from ${custodian}`, e.time, "custody-break");
+      flag(i, "c", "Custody break");
+      custodian = e.handler;
+    }
+  });
+
+  // 3. Unaccounted time between events
+  const gaps = new Map();
+  for (let i = 1; i < evs.length; i++) {
+    const gap = (toMs(evs[i].time) - toMs(evs[i - 1].time)) / 60000;
+    if (gap > opts.maxGap) {
+      add("warning", `${mins(gap)} with no log entry between ${hhmm(evs[i - 1].time)} and ${hhmm(evs[i].time)}`, evs[i].time, "time-gap");
+      gaps.set(i, gap);
+    }
+    if (gap < 0) add("warning", "Events are out of order in the log", evs[i].time, "order");
+  }
+
+  // 4. Delivery: present? on time?
+  const delivery = [...evs].reverse().find(e => e.type === "delivery");
+  if (!delivery) add("critical", "No delivery confirmation in the log", null, "no-delivery");
+  else if (validTime(s.due)) {
+    const late = (toMs(delivery.time) - toMs(s.due)) / 60000;
+    if (late > opts.lateGrace) {
+      add(late > 60 ? "critical" : "warning", `Delivered ${mins(late)} late (due ${hhmm(s.due)}, delivered ${hhmm(delivery.time)})`, delivery.time, "late");
+      flag(evs.indexOf(delivery), late > 60 ? "c" : "w", `${mins(late)} late`);
+    }
+  }
+  return { out, evs, flags, gaps };
+}
+
+function runRules(data) {
+  const opts = { ranges, maxGap: Number($("maxGap").value) || 90, lateGrace: Number($("lateGrace").value) || 0 };
+  const perShip = new Map();
+  let findings = [];
+  for (const s of data.shipments || []) {
+    s.category = CATEGORIES[s.category] ? s.category : "other";
+    const r = checkShipment(s, opts);
+    perShip.set(s.id, r);
+    findings.push(...r.out);
+  }
+  for (const o of data.observations || []) {
+    findings.push({ shipment: o.shipment_id || "—", severity: SEV_RANK[o.severity] !== undefined ? o.severity : "warning", issue: o.issue, time: validTime(o.time) ? o.time : null, source: "claude" });
+  }
+  findings.sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity] || (toMs(a.time) || 0) - (toMs(b.time) || 0));
+  return { findings, perShip };
+}
+
+/* ======================================================================
+   Claude extraction
+   ====================================================================== */
+function buildPrompt(logDate) {
+  const org = ORG_TYPES[$("orgType").value] || ORG_TYPES.general;
+  return `You convert messy delivery, courier and chain-of-custody logs into structured data. You only extract what the log says; the app runs all compliance checks itself.
+${org.guidance ? "\nContext: " + org.guidance + "\n" : ""}
+The log date is ${logDate}. Use it for any time written without a date. If the log crosses midnight, move later times to the next day.
+
+Return ONLY a JSON object, no prose and no code fences:
+{
+  "summary": string (2-4 plain sentences for a supervisor: what moved, and the most important problems),
+  "shipments": [ {
+    "id": string (the order, specimen, route or shipment ID as written; if none, make a short label like "Shipment 1"),
+    "item": string,
+    "category": "refrigerated" | "frozen" | "ambient" | "controlled" | "specimen" | "other",
+    "origin": string or null, "destination": string or null,
+    "due": "YYYY-MM-DDTHH:MM" or null,
+    "events": [ {
+      "time": "YYYY-MM-DDTHH:MM",
+      "type": "pickup" | "handoff" | "delivery" | "scan" | "temp_check" | "exception" | "note",
+      "location": string or null,
+      "from": string or null (person releasing custody),
+      "to": string or null (person receiving custody; for pickup, the courier),
+      "handler": string or null (who holds it, for scans/temp checks/notes),
+      "signed": true | false | null,
+      "temp": number or null, "temp_unit": "C" | "F" | null,
+      "note": string or null
+    } ]
+  } ],
+  "observations": [ { "shipment_id": string, "severity": "critical" | "warning" | "info", "issue": string, "time": "YYYY-MM-DDTHH:MM" or null } ]
+}
+Rules:
+- Never invent events, times, people, signatures or temperatures. If something isn't in the log, use null.
+- "signed": true only if the log says it was signed or a signature/initials were captured; false if the log says it was NOT signed or was refused; otherwise null.
+- One physical event that involves several shipments becomes an event on each shipment.
+- Keep temperatures in the unit written. Don't convert.
+- Category: refrigerated (2-8°C items like insulin, vaccines), frozen, ambient (room temperature goods), controlled (controlled substances), specimen (ambient lab specimens), other. Pick what the log implies; use "other" if unclear.
+- "observations" are problems only visible in the text that a timestamp/temperature/signature rule cannot catch: broken or torn seals, leaks, wrong address, damaged packaging, mislabeled items, refused deliveries, ID not checked. Do NOT repeat temperature, signature, lateness or time-gap problems there; the app finds those itself.
+- If the log contains patient names, refer to items by ID only and do not repeat the names anywhere.`;
+}
+
+async function extract() {
+  const key = $("key").value.trim();
+  const log = $("log").value.trim();
+  const logDate = $("logDate").value || isoToday();
+  if (!key) return setStatus("Add your Claude API key first, or try the demo report.", true);
+  if (!log) return setStatus("Paste or upload a log first.", true);
+  $("run").disabled = true; setStatus("Reading the log and building timelines…");
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+      body: JSON.stringify({ model: MODEL, max_tokens: 8000, system: buildPrompt(logDate), messages: [{ role: "user", content: `Log:\n\n${log}` }] })
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body?.error?.message || `API error (${res.status})`);
+    const text = (body.content || []).filter(b => b.type === "text").map(b => b.text).join("");
+    const a = text.indexOf("{"), z = text.lastIndexOf("}");
+    if (a < 0 || z < 0) throw new Error("Claude didn't return structured data. Try again.");
+    const data = JSON.parse(text.slice(a, z + 1));
+    if (!Array.isArray(data.shipments)) throw new Error("No shipments found in that log.");
+    show(data, false);
+    const crit = report.findings.filter(f => f.severity === "critical").length;
+    setStatus(`Done — ${data.shipments.length} shipment${data.shipments.length === 1 ? "" : "s"}, ${crit} critical issue${crit === 1 ? "" : "s"}.`);
+  } catch (e) {
+    setStatus(e.message || "Something went wrong.", true);
+  } finally { $("run").disabled = false; }
+}
+
+/* ======================================================================
+   Render
+   ====================================================================== */
+function show(data, isDemo) {
+  const { findings, perShip } = runRules(data);
+  report = { data, findings, perShip, isDemo, logDate: $("logDate").value || isoToday() };
+  const crit = findings.filter(f => f.severity === "critical");
+  const warn = findings.filter(f => f.severity === "warning");
+  const shipStatus = (id) => findings.some(f => f.shipment === id && f.severity === "critical") ? "critical"
+    : findings.some(f => f.shipment === id && f.severity === "warning") ? "review" : "clean";
+  const clean = data.shipments.filter(s => shipStatus(s.id) === "clean").length;
+
+  $("reportMeta").textContent = `— ${ORG_TYPES[$("orgType").value].eyebrow.toLowerCase()} · ${new Date(report.logDate + "T12:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}${isDemo ? " · demo" : ""}`;
+  $("stats").innerHTML = `
+    <div class="stat"><b>${data.shipments.length}</b><span>shipments</span></div>
+    <div class="stat ${crit.length ? "crit" : ""}"><b>${crit.length}</b><span>critical issues</span></div>
+    <div class="stat ${warn.length ? "warn" : ""}"><b>${warn.length}</b><span>warnings</span></div>
+    <div class="stat ok"><b>${clean}</b><span>clean</span></div>`;
+  $("summary").textContent = data.summary || "";
+
+  $("exceptions").innerHTML = findings.length
+    ? findings.map(f => `<tr>
+        <td><span class="pill sev-${f.severity}">${f.severity}</span></td>
+        <td><b>${escapeHtml(f.shipment)}</b></td>
+        <td>${escapeHtml(f.issue)}<span class="src">${f.source === "rule" ? "Rule check" : "Noted in log"}</span></td>
+        <td>${f.time ? escapeHtml(hhmm(f.time)) : "—"}</td></tr>`).join("")
+    : '<tr><td colspan="4" style="color:var(--ok); font-weight:600">No exceptions. Every shipment passed every check.</td></tr>';
+
+  $("shipments").innerHTML = data.shipments.map(s => {
+    const r = perShip.get(s.id); const st = shipStatus(s.id);
+    const stLabel = { clean: "Clean", review: "Needs review", critical: "Critical" }[st];
+    const [lo, hi] = ranges[s.category] || [null, null];
+    const rangeTxt = lo === null && hi === null ? "" : ` · range ${lo ?? "—"} to ${hi ?? "—"}°C`;
+    const items = r.evs.map((e, i) => {
+      const c = toC(e.temp, e.temp_unit);
+      const bad = c !== null && ((lo !== null && c < lo) || (hi !== null && c > hi));
+      const people = e.from || e.to ? `${escapeHtml(e.from || "?")} → ${escapeHtml(e.to || "?")}` : (e.handler ? escapeHtml(e.handler) : "");
+      const sig = e.signed === true ? '<span class="chip okc">signed</span>' : e.signed === false ? '<span class="chip bad">not signed</span>' : "";
+      const fl = (r.flags.get(i) || []).map(f => `<span class="flag ${f.sev === "w" ? "w" : ""}">⚠ ${escapeHtml(f.text)}</span>`).join(" ");
+      const gap = r.gaps?.get(i) ? `<div class="gapnote">${mins(r.gaps.get(i))} with no log entry before this</div>` : "";
+      return `${gap ? `<li style="border-bottom:none; padding-bottom:0">${gap}</li>` : ""}<li>
+        <div class="t-time">${escapeHtml(hhmm(e.time))}</div>
+        <div>
+          <span class="t-type">${escapeHtml(String(e.type || "event").replace("_", " "))}</span>
+          ${e.location ? ` · ${escapeHtml(e.location)}` : ""}${sig}
+          ${c !== null ? `<span class="chip ${bad ? "bad" : "okc"}">${escapeHtml(fmtTemp(e.temp, e.temp_unit))}</span>` : ""}
+          <div class="t-detail">${people}${people && e.note ? " · " : ""}${e.note ? escapeHtml(e.note) : ""}</div>
+          ${fl}
+        </div></li>`;
+    }).join("");
+    return `<div class="ship">
+      <div class="ship-head">
+        <div><h3>${escapeHtml(s.id)} <span class="pill st-${st}">${stLabel}</span></h3>
+          <div class="meta">${escapeHtml(s.item || "")} · ${escapeHtml(CATEGORIES[s.category])}${rangeTxt}</div></div>
+        <div class="meta">${escapeHtml(s.origin || "?")} → ${escapeHtml(s.destination || "?")}${validTime(s.due) ? ` · due ${escapeHtml(hhmm(s.due))}` : ""}</div>
+      </div>
+      <ol class="timeline">${items || '<li><div></div><div class="t-detail">No timestamped events.</div></li>'}</ol>
+    </div>`;
+  }).join("");
+
+  $("report").hidden = false;
+  $("report").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/* ======================================================================
+   Exports
+   ====================================================================== */
+function reportTitle() {
+  return `Chain-of-custody report — ${new Date(report.logDate + "T12:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}`;
+}
+function plainReport() {
+  const f = report.findings, d = report.data;
+  const lines = [reportTitle(), "", d.summary || "", "",
+    `${d.shipments.length} shipments · ${f.filter(x => x.severity === "critical").length} critical · ${f.filter(x => x.severity === "warning").length} warnings`, ""];
+  for (const sev of ["critical", "warning", "info"]) {
+    const list = f.filter(x => x.severity === sev); if (!list.length) continue;
+    lines.push(sev.toUpperCase());
+    list.forEach(x => lines.push(`- [${x.shipment}]${x.time ? " " + hhmm(x.time) : ""} ${x.issue}${x.source === "claude" ? " (noted in log)" : ""}`));
+    lines.push("");
+  }
+  lines.push("TIMELINES");
+  d.shipments.forEach(s => {
+    lines.push(`${s.id} — ${s.item || ""} (${CATEGORIES[s.category]}) ${s.origin || "?"} → ${s.destination || "?"}${validTime(s.due) ? `, due ${hhmm(s.due)}` : ""}`);
+    report.perShip.get(s.id).evs.forEach(e => lines.push(`  ${hhmm(e.time)} ${e.type}${e.location ? " @ " + e.location : ""}${e.from || e.to ? ` (${e.from || "?"} → ${e.to || "?"})` : ""}${e.signed === true ? " signed" : e.signed === false ? " NOT SIGNED" : ""}${toC(e.temp, e.temp_unit) !== null ? " " + fmtTemp(e.temp, e.temp_unit) : ""}${e.note ? " — " + e.note : ""}`));
+  });
+  lines.push("", "Rule checks are calculated from the log. Confirm critical findings against original records.");
+  return lines.join("\n");
+}
+function csv(rows) { return rows.map(r => r.map(c => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n"); }
+function download(name, text, type = "text/csv") {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+async function copy(text, msg) {
+  try { await navigator.clipboard.writeText(text); setStatus(msg); } catch { setStatus("Couldn't copy — your browser blocked clipboard access.", true); }
+}
+$("copyReport").addEventListener("click", () => report && copy(plainReport(), "Incident report copied."));
+$("emailReport").addEventListener("click", () => {
+  if (!report) return;
+  const crit = report.findings.filter(f => f.severity === "critical").length;
+  const subject = `${crit ? `${crit} critical issue${crit === 1 ? "" : "s"}: ` : ""}${reportTitle()}`;
+  location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainReport())}`;
+});
+$("csvExceptions").addEventListener("click", () => report && download(`custody-exceptions-${report.logDate}.csv`,
+  csv([["Severity", "Shipment", "Issue", "Time", "Source"], ...report.findings.map(f => [f.severity, f.shipment, f.issue, f.time ? f.time.replace("T", " ") : "", f.source === "rule" ? "Rule check" : "Noted in log"])])));
+$("csvTimeline").addEventListener("click", () => {
+  if (!report) return;
+  const rows = [["Shipment", "Item", "Category", "Time", "Event", "Location", "From", "To", "Signed", "Temp", "Unit", "Temp °C", "Note"]];
+  report.data.shipments.forEach(s => report.perShip.get(s.id).evs.forEach(e => {
+    const c = toC(e.temp, e.temp_unit);
+    rows.push([s.id, s.item, CATEGORIES[s.category], e.time.replace("T", " "), e.type, e.location, e.from || e.handler, e.to, e.signed === true ? "yes" : e.signed === false ? "NO" : "", e.temp ?? "", e.temp_unit ?? "", c === null ? "" : c.toFixed(1), e.note]);
+  }));
+  download(`custody-timeline-${report.logDate}.csv`, csv(rows));
+});
+$("print").addEventListener("click", () => window.print());
+
+/* ======================================================================
+   Settings + wiring
+   ====================================================================== */
+function renderRanges() {
+  $("ranges").innerHTML = Object.entries(CATEGORIES).map(([k, label]) => `<tr>
+    <td>${label}</td>
+    <td><input type="number" step="0.5" data-k="${k}" data-i="0" value="${ranges[k][0] ?? ""}" aria-label="${label} minimum" style="max-width:110px"></td>
+    <td><input type="number" step="0.5" data-k="${k}" data-i="1" value="${ranges[k][1] ?? ""}" aria-label="${label} maximum" style="max-width:110px"></td></tr>`).join("");
+  $("rangeSummary").textContent = `— refrigerated ${ranges.refrigerated[0] ?? "—"} to ${ranges.refrigerated[1] ?? "—"}°C, frozen at or below ${ranges.frozen[1] ?? "—"}°C`;
+}
+$("ranges").addEventListener("change", (e) => {
+  const k = e.target.dataset.k, i = Number(e.target.dataset.i); if (!k) return;
+  ranges[k][i] = e.target.value === "" ? null : Number(e.target.value);
+  writeStore("coc-ranges-v1", ranges); renderRanges();
+  if (report) show(report.data, report.isDemo);
+});
+["maxGap", "lateGrace"].forEach(id => $(id).addEventListener("change", () => {
+  writeStore("coc-opts-v1", { maxGap: $("maxGap").value, lateGrace: $("lateGrace").value });
+  if (report) show(report.data, report.isDemo);
+}));
+$("orgType").innerHTML = Object.entries(ORG_TYPES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("");
+$("orgType").addEventListener("change", () => {
+  writeStore("coc-org-v1", $("orgType").value);
+  $("eyebrow").textContent = ORG_TYPES[$("orgType").value].eyebrow;
+  $("privacy").hidden = $("orgType").value === "food" || $("orgType").value === "general";
+  if (report) show(report.data, report.isDemo);
+});
+$("file").addEventListener("change", async () => {
+  const f = $("file").files[0]; if (!f) return;
+  if (f.size > 400000) { setStatus("That file is over 400 KB. Split it into smaller logs, like one day or route at a time.", true); $("file").value = ""; return; }
+  $("log").value = await f.text(); $("fileNote").textContent = `Loaded ${f.name}`; $("file").value = "";
+});
+$("sample").addEventListener("click", () => { $("orgType").value = "medical"; $("orgType").dispatchEvent(new Event("change")); $("log").value = SAMPLE_LOG; setStatus("Sample log loaded."); });
+$("demo").addEventListener("click", () => {
+  $("orgType").value = "medical"; $("orgType").dispatchEvent(new Event("change"));
+  $("log").value = SAMPLE_LOG;
+  show(demoExtraction($("logDate").value || isoToday()), true);
+  setStatus("Showing a demo. Try changing the temperature ranges or time limits; the checks rerun instantly.");
+});
+$("run").addEventListener("click", extract);
+
+// Start
+ranges = Object.assign(JSON.parse(JSON.stringify(DEFAULT_RANGES)), readStore("coc-ranges-v1", {}));
+const savedOpts = readStore("coc-opts-v1", null);
+if (savedOpts) { $("maxGap").value = savedOpts.maxGap; $("lateGrace").value = savedOpts.lateGrace; }
+const savedOrg = readStore("coc-org-v1", "medical");
+$("orgType").value = ORG_TYPES[savedOrg] ? savedOrg : "medical";
+$("orgType").dispatchEvent(new Event("change"));
+$("logDate").value = isoToday();
+renderRanges();
+</script>
+</body>
+</html>
