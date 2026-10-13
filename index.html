@@ -83,22 +83,80 @@
     .noprint { display: none !important; }
     .panel, .ship { border-color: #ccc; break-inside: avoid; }
   }
+  /* Team, review, recorder, digest */
+  details.panel > summary { list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  details.panel > summary::-webkit-details-marker { display: none; }
+  details.panel > summary::after { content: "Show"; color: var(--accent); font-size: 0.9rem; font-weight: 600; }
+  details.panel[open] > summary::after { content: "Hide"; }
+  .person-row { display: grid; grid-template-columns: 1.1fr 1.6fr 1.1fr 1fr auto; gap: 8px; align-items: center; margin-top: 8px; }
+  .person-row input, .person-row select { padding: 7px 10px; font-size: 0.92rem; min-width: 0; }
+  @media (max-width: 680px) { .person-row { grid-template-columns: 1fr 1fr; } }
+  .x { border: none; background: none; color: var(--muted); font-size: 1.2rem; padding: 2px 8px; }
+  .rev select, .rev input { padding: 5px 8px; font-size: 0.88rem; }
+  .rev input { margin-top: 6px; }
+  .rev-resolved { color: var(--ok); font-weight: 700; } .rev-dismissed { color: var(--muted); font-weight: 700; } .rev-open { font-weight: 700; }
+  tr.is-closed td:not(.rev) { opacity: 0.55; }
+  .recorder { margin-top: 12px; border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; }
+  .rec-btn.recording { background: var(--crit); color: #fff; border-color: var(--crit); }
+  .rec-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: currentColor; margin-right: 6px; }
+  .recording .rec-dot { animation: pulse 1.2s infinite; background: #fff; }
+  @keyframes pulse { 50% { opacity: 0.3; } }
+  .interim { color: var(--muted); font-style: italic; font-size: 0.9rem; min-height: 1.3em; margin-top: 6px; }
+  .send-row { display: grid; grid-template-columns: 1fr 1.5fr 1.4fr auto; gap: 8px; align-items: center; margin-top: 10px; }
+  .send-row input, .send-row select { padding: 7px 10px; font-size: 0.9rem; min-width: 0; }
+  @media (max-width: 600px) { .send-row { grid-template-columns: 1fr 1fr; } .send-row .who { grid-column: 1 / -1; } }
+  .who b { display: block; } .who span { color: var(--muted); font-size: 0.85rem; }
+  .bar { height: 8px; border-radius: 4px; background: var(--accent); min-width: 2px; }
+  .bar.c { background: var(--crit); }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow" id="eyebrow">Chain of custody</p>
-    <h1>Delivery Log → Custody Report</h1>
-    <p>Paste or upload messy courier, specimen or cold-chain logs. Claude organizes them into a timeline for each shipment, and the page checks every rule: temperature, signatures, custody handoffs, unaccounted time and late delivery.</p>
+    <div class="row" style="margin-top:0; justify-content:space-between; align-items:flex-start">
+      <div>
+        <p class="eyebrow" id="eyebrow">Chain of custody</p>
+        <h1>Delivery Log → Custody Report</h1>
+      </div>
+      <button class="small noprint" id="shareLink" style="border:none; background:none; color:var(--accent); padding:4px 0">Copy tailored link</button>
+    </div>
+    <p>Paste, upload or dictate messy courier, specimen or cold-chain logs. Claude organizes them into a timeline for each shipment, and the page checks every rule: temperature, signatures, custody handoffs, unaccounted time and late delivery.</p>
   </header>
+
+  <!-- Team & history -->
+  <details class="panel noprint" id="teamPanel">
+    <summary><span>Team &amp; saved reports <span class="hint" id="teamSummary"></span></span></summary>
+    <div style="margin-top:14px">
+      <h3>People</h3>
+      <p class="hint" style="margin:2px 0 6px">Drivers get their own exceptions by email, in their language. Supervisors get the full report and the weekly digest. Use the names as they appear in your logs.</p>
+      <div id="people"></div>
+      <div class="row" style="margin-top:10px"><button class="small" id="addPerson">+ Add person</button></div>
+
+      <h3 style="margin-top:22px">Saved reports</h3>
+      <p class="hint" style="margin:2px 0 6px">Reports and your review notes are saved in this browser only, never online. Use a backup file to move them to another device.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Log date</th><th>Shipments</th><th>Critical</th><th>Still open</th><th></th></tr></thead>
+        <tbody id="historyRows"></tbody>
+      </table></div>
+      <div class="row">
+        <button class="small" id="exportBackup">Export backup</button>
+        <button class="small" id="importBtn" type="button">Import backup</button>
+        <input id="importFile" type="file" accept="application/json,.json" hidden>
+      </div>
+    </div>
+  </details>
 
   <!-- Input -->
   <section class="panel noprint">
-    <div class="grid2">
+    <div class="grid3">
       <div>
-        <label for="key">Claude API key <span class="hint">— stays in this tab, never saved</span></label>
+        <label for="key">Claude API key <span class="hint">— never saved</span></label>
         <input id="key" type="password" placeholder="sk-ant-..." autocomplete="off">
+      </div>
+      <div>
+        <label for="orgName">Organization name <span class="hint">— optional</span></label>
+        <input id="orgName" type="text" maxlength="60" placeholder="e.g. Gulf Coast Courier Co.">
       </div>
       <div>
         <label for="orgType">What kind of work is this?</label>
@@ -107,12 +165,27 @@
     </div>
 
     <label for="log" style="margin-top:16px">Delivery or custody log <span class="hint">— driver notes, scan exports, temperature logs, CSV, anything</span></label>
-    <textarea id="log" spellcheck="false" placeholder="Paste log text here, or upload a .csv / .txt file. Times without dates use the log date below."></textarea>
+    <textarea id="log" spellcheck="false" placeholder="Paste log text here, upload a .csv / .txt file, or dictate below. Times without dates use the log date."></textarea>
     <div class="row" style="margin-top:8px">
       <label class="filebtn small" style="margin:0">Upload a file<input id="file" type="file" accept=".csv,.txt,.log,.tsv,text/plain,text/csv" hidden></label>
       <span class="hint" id="fileNote"></span>
     </div>
-    <div class="notice" id="privacy">Don't paste patient names or other protected health information. Order, specimen or route IDs work fine.</div>
+
+    <div class="recorder">
+      <div class="row" style="margin-top:0; justify-content:space-between">
+        <h3>Dictate notes <span class="hint">— for drivers at each stop; adds to the log above</span></h3>
+        <div class="row" style="margin-top:0">
+          <select id="recLang" style="width:auto" aria-label="Language spoken"></select>
+          <button class="rec-btn small" id="recBtn"><span class="rec-dot"></span><span id="recLabel">Start dictating</span></button>
+          <span class="status" id="recTimer"></span>
+        </div>
+      </div>
+      <label class="hint" style="display:flex; gap:8px; align-items:center; margin:8px 0 0; font-weight:400"><input type="checkbox" id="stampLines" checked> Start each dictated line with the current time</label>
+      <p class="hint" id="recHelp" style="margin:6px 0 0">Example: "Picked up A-2291 at Westside Clinic, signed by R. Lee, temp 72 degrees." Pause between stops, and check the text before building the report.</p>
+      <div class="interim" id="interim"></div>
+    </div>
+
+    <div class="notice" id="privacy">Don't paste or dictate patient names or other protected health information. Order, specimen or route IDs work fine.</div>
 
     <div class="grid3" style="margin-top:16px">
       <div>
@@ -152,10 +225,10 @@
   <section id="report" hidden>
     <div class="panel">
       <div class="row" style="margin-top:0; justify-content:space-between">
-        <h2 style="margin:0">Custody report <span class="hint" id="reportMeta"></span></h2>
+        <h2 style="margin:0"><span id="reportTitle">Custody report</span> <span class="hint" id="reportMeta"></span></h2>
         <div class="btns noprint">
           <button class="small" id="copyReport">Copy incident report</button>
-          <button class="small" id="emailReport">Email to supervisor</button>
+          <button class="small" id="copySheets">Copy for Google Sheets / Excel</button>
           <button class="small" id="csvExceptions">Exceptions CSV</button>
           <button class="small" id="csvTimeline">Full timeline CSV</button>
           <button class="small" id="print">Print / save PDF</button>
@@ -166,14 +239,30 @@
     </div>
 
     <div class="panel">
-      <h2>Exceptions <span class="hint">— most serious first</span></h2>
+      <h2>Exceptions <span class="hint">— most serious first; mark each one once it's been dealt with</span></h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Severity</th><th>Shipment</th><th>Issue</th><th>When</th></tr></thead>
+          <thead><tr><th>Severity</th><th>Shipment</th><th>Issue</th><th>When</th><th style="min-width:190px">Review</th></tr></thead>
           <tbody id="exceptions"></tbody>
         </table>
       </div>
       <p class="hint" style="margin:10px 0 0">"Rule check" items are calculated by the page from the timeline. "Noted in log" items are things Claude spotted in the text, like a broken seal, which no rule can measure.</p>
+    </div>
+
+    <div class="panel noprint">
+      <h2>Send</h2>
+      <div class="grid2">
+        <div class="card" style="border:1px solid var(--line); border-radius:10px; padding:14px; background:var(--soft)">
+          <h3>Email each person their exceptions</h3>
+          <p class="hint" style="margin:4px 0 0">Only open exceptions are included. Emails are translated into each person's language using your API key.</p>
+          <div id="sendRows"></div>
+        </div>
+        <div class="card" style="border:1px solid var(--line); border-radius:10px; padding:14px; background:var(--soft)">
+          <h3>Supervisors</h3>
+          <p class="hint" style="margin:4px 0 10px" id="supNote"></p>
+          <button class="small primary" id="emailReport">Email full report to supervisors</button>
+        </div>
+      </div>
     </div>
 
     <div class="panel">
@@ -182,15 +271,31 @@
     </div>
   </section>
 
-  <footer>Built with the Claude API. Logs go straight from your browser to Anthropic's API and are never stored. Rule results are only as accurate as the log; always confirm critical findings against the original records.</footer>
+  <!-- Weekly digest -->
+  <section class="panel" id="digestPanel" hidden>
+    <div class="row" style="margin-top:0; justify-content:space-between">
+      <h2 style="margin:0">Weekly exception digest <span class="hint" id="digestMeta"></span></h2>
+    </div>
+    <div class="stats" id="digestStats" style="margin-top:12px"></div>
+    <div class="grid2" style="margin-top:16px">
+      <div><h3>Most common issues</h3><table><tbody id="digestRules"></tbody></table></div>
+      <div><h3>People most involved</h3><table><tbody id="digestPeople"></tbody></table></div>
+    </div>
+    <div id="digestOpen"></div>
+    <div class="btns noprint" style="margin-top:14px">
+      <button class="small primary" id="emailDigest">Email digest to supervisors</button>
+      <button class="small" id="copyDigest">Copy digest</button>
+      <button class="small" id="icsDigest">Add Monday reminder to my calendar</button>
+    </div>
+    <p class="hint" style="margin:10px 0 0">Covers saved reports with a log date in the last 7 days. Recurring issues by person point to training or route problems, not just one bad day.</p>
+  </section>
+
+  <footer id="footer">Built with the Claude API. Logs go straight from your browser to Anthropic's API. Saved reports stay in this browser. Rule results are only as accurate as the log; always confirm critical findings against the original records.</footer>
 </div>
 
 <script>
 const MODEL = "claude-sonnet-5-5";
 
-/* ======================================================================
-   Organization presets: wording + default temperature ranges (°C)
-   ====================================================================== */
 const CATEGORIES = {
   refrigerated: "Refrigerated",
   frozen: "Frozen",
@@ -290,85 +395,99 @@ function fmtTemp(temp, unit) {
 function sameName(a, b) { return String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase(); }
 
 /* ======================================================================
-   Rule engine — everything here is calculated, never guessed by the model
+   Rule engine — everything here is calculated, never guessed by the model.
+   Each finding records which people were involved, so it can be emailed to them.
    ====================================================================== */
 const SEV_RANK = { critical: 0, warning: 1, info: 2 };
+const RULE_LABEL = {
+  "temp-high": "Temperature too high", "temp-low": "Temperature too low", "temp-missing": "No temperature readings",
+  "temp-single": "Only one temperature reading", "unsigned": "Unsigned pickup, handoff or delivery",
+  "signature-unknown": "Signature not recorded", "custody-break": "Break in custody", "time-gap": "Unaccounted time",
+  "late": "Late delivery", "no-delivery": "No delivery confirmation", "no-events": "No timestamped events",
+  "order": "Events out of order", "claude": "Noted in log (seals, damage, labels…)"
+};
+const uniq = (arr) => [...new Map(arr.filter(Boolean).map(n => [String(n).trim().toLowerCase(), String(n).trim()])).values()];
 
 function checkShipment(s, opts) {
   const out = [];
-  const add = (severity, issue, time, rule) => out.push({ shipment: s.id, severity, issue, time: time || null, source: "rule", rule });
+  const add = (severity, issue, time, rule, people) => out.push({ shipment: s.id, severity, issue, time: time || null, source: "rule", rule, people: uniq(people || []) });
   const evs = [...(s.events || [])].filter(e => validTime(e.time)).sort((a, b) => toMs(a.time) - toMs(b.time));
   const [lo, hi] = opts.ranges[s.category] || [null, null];
   const tempControlled = lo !== null || hi !== null;
-
-  if (!evs.length) { add("critical", "No timestamped events found for this shipment", null, "no-events"); return { out, evs, flags: new Map() }; }
-
-  const flags = new Map();   // event index -> list of {sev, text}
+  const flags = new Map(), gaps = new Map();
   const flag = (i, sev, text) => { if (!flags.has(i)) flags.set(i, []); flags.get(i).push({ sev, text }); };
+  if (!evs.length) { add("critical", "No timestamped events found for this shipment", null, "no-events"); return { out, evs, flags, gaps }; }
 
-  // 1. Temperature excursions
-  let tempReadings = 0;
-  evs.forEach((e, i) => {
-    const c = toC(e.temp, e.temp_unit); if (c === null) return;
-    tempReadings++;
-    if (lo !== null && c < lo) { add("critical", `Temperature ${fmtTemp(e.temp, e.temp_unit)} is below the ${CATEGORIES[s.category].toLowerCase()} minimum of ${lo}°C`, e.time, "temp-low"); flag(i, "c", `Below ${lo}°C`); }
-    if (hi !== null && c > hi) { add("critical", `Temperature ${fmtTemp(e.temp, e.temp_unit)} is above the ${CATEGORIES[s.category].toLowerCase()} maximum of ${hi}°C`, e.time, "temp-high"); flag(i, "c", `Above ${hi}°C`); }
-  });
-  if (tempControlled && tempReadings === 0) add("warning", `No temperature readings recorded for a ${CATEGORIES[s.category].toLowerCase()} shipment`, null, "temp-missing");
-  else if (tempControlled && tempReadings === 1) add("info", "Only one temperature reading recorded; consider logging at pickup and delivery", null, "temp-single");
-
-  // 2. Custody: signatures and breaks in who holds it
+  // Custodian before each event (for blaming the right person on gaps/temps)
+  const holderBefore = [];
   let custodian = null;
+  const label = (t) => t === "delivery" ? "Delivery" : t === "pickup" ? "Pickup" : "Handoff";
   evs.forEach((e, i) => {
+    holderBefore[i] = custodian;
     const type = e.type;
     if (type === "pickup" || type === "handoff" || type === "delivery") {
       if (e.signed === false) {
-        add("critical", `${type === "delivery" ? "Delivery" : type === "pickup" ? "Pickup" : "Handoff"} ${e.from ? `from ${e.from} ` : ""}${e.to ? `to ${e.to} ` : ""}was not signed`, e.time, "unsigned");
+        add("critical", `${label(type)} ${e.from ? `from ${e.from} ` : ""}${e.to ? `to ${e.to} ` : ""}was not signed`, e.time, "unsigned", [e.from, e.to]);
         flag(i, "c", "No signature");
       } else if (e.signed !== true) {
-        add("warning", `${type === "delivery" ? "Delivery" : type === "pickup" ? "Pickup" : "Handoff"} at ${e.location || "unknown location"} has no signature recorded`, e.time, "signature-unknown");
+        add("warning", `${label(type)} at ${e.location || "unknown location"} has no signature recorded`, e.time, "signature-unknown", [e.from, e.to]);
         flag(i, "w", "Signature not recorded");
       }
       if (custodian && e.from && !sameName(e.from, custodian) && type !== "pickup") {
-        add("critical", `Custody break: log shows ${custodian} holding it, but ${e.from} handed it over`, e.time, "custody-break");
+        add("critical", `Custody break: log shows ${custodian} holding it, but ${e.from} handed it over`, e.time, "custody-break", [custodian, e.from]);
         flag(i, "c", "Custody break");
       }
       if (e.to) custodian = e.to;
     } else if (e.handler && custodian && !sameName(e.handler, custodian)) {
-      add("critical", `Custody break: ${e.handler} had it with no recorded handoff from ${custodian}`, e.time, "custody-break");
+      add("critical", `Custody break: ${e.handler} had it with no recorded handoff from ${custodian}`, e.time, "custody-break", [custodian, e.handler]);
       flag(i, "c", "Custody break");
       custodian = e.handler;
     }
   });
 
-  // 3. Unaccounted time between events
-  const gaps = new Map();
+  // Temperature
+  let readings = 0;
+  evs.forEach((e, i) => {
+    const c = toC(e.temp, e.temp_unit); if (c === null) return;
+    readings++;
+    const who = [holderBefore[i] || e.from, e.type === "pickup" ? e.to : null, e.handler];
+    if (lo !== null && c < lo) { add("critical", `Temperature ${fmtTemp(e.temp, e.temp_unit)} is below the ${CATEGORIES[s.category].toLowerCase()} minimum of ${lo}°C`, e.time, "temp-low", who); flag(i, "c", `Below ${lo}°C`); }
+    if (hi !== null && c > hi) { add("critical", `Temperature ${fmtTemp(e.temp, e.temp_unit)} is above the ${CATEGORIES[s.category].toLowerCase()} maximum of ${hi}°C`, e.time, "temp-high", who); flag(i, "c", `Above ${hi}°C`); }
+  });
+  const couriers = uniq(evs.map(e => e.type === "pickup" ? e.to : e.type === "handoff" ? e.to : null));
+  if (tempControlled && readings === 0) add("warning", `No temperature readings recorded for a ${CATEGORIES[s.category].toLowerCase()} shipment`, null, "temp-missing", couriers);
+  else if (tempControlled && readings === 1) add("info", "Only one temperature reading recorded; consider logging at pickup and delivery", null, "temp-single", couriers);
+
+  // Unaccounted time
   for (let i = 1; i < evs.length; i++) {
     const gap = (toMs(evs[i].time) - toMs(evs[i - 1].time)) / 60000;
     if (gap > opts.maxGap) {
-      add("warning", `${mins(gap)} with no log entry between ${hhmm(evs[i - 1].time)} and ${hhmm(evs[i].time)}`, evs[i].time, "time-gap");
+      add("warning", `${mins(gap)} with no log entry between ${hhmm(evs[i - 1].time)} and ${hhmm(evs[i].time)}`, evs[i].time, "time-gap", [holderBefore[i]]);
       gaps.set(i, gap);
     }
     if (gap < 0) add("warning", "Events are out of order in the log", evs[i].time, "order");
   }
 
-  // 4. Delivery: present? on time?
-  const delivery = [...evs].reverse().find(e => e.type === "delivery");
-  if (!delivery) add("critical", "No delivery confirmation in the log", null, "no-delivery");
+  // Delivery
+  const di = evs.map(e => e.type).lastIndexOf("delivery");
+  if (di < 0) add("critical", "No delivery confirmation in the log", null, "no-delivery", [custodian]);
   else if (validTime(s.due)) {
-    const late = (toMs(delivery.time) - toMs(s.due)) / 60000;
+    const d = evs[di];
+    const late = (toMs(d.time) - toMs(s.due)) / 60000;
     if (late > opts.lateGrace) {
-      add(late > 60 ? "critical" : "warning", `Delivered ${mins(late)} late (due ${hhmm(s.due)}, delivered ${hhmm(delivery.time)})`, delivery.time, "late");
-      flag(evs.indexOf(delivery), late > 60 ? "c" : "w", `${mins(late)} late`);
+      add(late > 60 ? "critical" : "warning", `Delivered ${mins(late)} late (due ${hhmm(s.due)}, delivered ${hhmm(d.time)})`, d.time, "late", [d.from || holderBefore[di]]);
+      flag(di, late > 60 ? "c" : "w", `${mins(late)} late`);
     }
   }
   return { out, evs, flags, gaps };
 }
 
+function findingKey(f) { return [f.shipment, f.rule || "claude", f.time || "", f.source === "claude" ? f.issue : ""].join("|"); }
+
 function runRules(data) {
   const opts = { ranges, maxGap: Number($("maxGap").value) || 90, lateGrace: Number($("lateGrace").value) || 0 };
   const perShip = new Map();
-  let findings = [];
+  const findings = [];
   for (const s of data.shipments || []) {
     s.category = CATEGORIES[s.category] ? s.category : "other";
     const r = checkShipment(s, opts);
@@ -376,20 +495,135 @@ function runRules(data) {
     findings.push(...r.out);
   }
   for (const o of data.observations || []) {
-    findings.push({ shipment: o.shipment_id || "—", severity: SEV_RANK[o.severity] !== undefined ? o.severity : "warning", issue: o.issue, time: validTime(o.time) ? o.time : null, source: "claude" });
+    const s = (data.shipments || []).find(x => x.id === o.shipment_id);
+    const near = s && validTime(o.time) ? (s.events || []).find(e => e.time === o.time) : null;
+    findings.push({ shipment: o.shipment_id || "—", severity: SEV_RANK[o.severity] !== undefined ? o.severity : "warning", issue: o.issue,
+      time: validTime(o.time) ? o.time : null, source: "claude", rule: "claude", people: uniq(near ? [near.from, near.to, near.handler] : []) });
   }
+  findings.forEach(f => f.key = findingKey(f));
   findings.sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity] || (toMs(a.time) || 0) - (toMs(b.time) || 0));
   return { findings, perShip };
 }
 
 /* ======================================================================
-   Claude extraction
+   Organization, people, savedReports (all saved in this browser only)
    ====================================================================== */
+const PEOPLE_KEY = "coc-people-v1", HISTORY_KEY = "coc-history-v1", ORG_KEY = "coc-org-v2";
+const LANGS = ["English", "Spanish", "Vietnamese", "Chinese (Simplified)", "Chinese (Traditional)", "Arabic", "Urdu", "Tagalog",
+  "French", "Haitian Creole", "Hindi", "Korean", "Portuguese", "Russian", "Swahili"];
+const REC_LANGS = [["en-US", "English"], ["es-US", "Spanish"], ["vi-VN", "Vietnamese"], ["zh-CN", "Chinese (Mandarin)"],
+  ["ar-SA", "Arabic"], ["fr-FR", "French"], ["fil-PH", "Tagalog"], ["hi-IN", "Hindi"], ["ko-KR", "Korean"], ["pt-BR", "Portuguese"]];
+const ROLES = { driver: "Driver / courier", supervisor: "Supervisor", other: "Other" };
+const REVIEW = { open: "Open", resolved: "Resolved", dismissed: "Not an issue" };
+
+let people = readStore(PEOPLE_KEY, []);
+let savedReports = readStore(HISTORY_KEY, []);
+function org() { return { type: $("orgType").value, name: $("orgName").value.trim() }; }
+function orgKey() { const o = org(); return `${o.type}|${o.name.toLowerCase()}`; }
+function myHistory() { return savedReports.filter(h => h.orgKey === orgKey()).sort((a, b) => b.logDate.localeCompare(a.logDate) || b.id - a.id); }
+function savePeople() { writeStore(PEOPLE_KEY, people); }
+function saveHistory() { writeStore(HISTORY_KEY, savedReports); }
+function findPerson(name) { return people.find(p => sameName(p.name, name)); }
+function supervisors() { return people.filter(p => p.role === "supervisor" && p.email); }
+function upsertPerson(name, fields) {
+  let p = findPerson(name);
+  const isNew = !p;
+  if (isNew) { p = { name, email: "", language: "English", role: "driver" }; people.push(p); }
+  Object.assign(p, fields); savePeople();
+  if (isNew) renderPeople(); else peopleMeta();   // the people list is a different panel, so redrawing it is safe
+  return p;
+}
+
+function applyOrg() {
+  const o = org(), t = ORG_TYPES[o.type] || ORG_TYPES.general;
+  $("eyebrow").textContent = o.name ? `${o.name} · ${t.eyebrow}` : t.eyebrow;
+  document.title = o.name ? `${o.name} · Custody Report` : "Chain-of-Custody Log Summarizer";
+  $("privacy").hidden = o.type === "food" || o.type === "general";
+  writeStore(ORG_KEY, o);
+  renderHistory(); renderDigest();
+}
+
+function langOptions(sel) { return LANGS.map(l => `<option ${l === (sel || "English") ? "selected" : ""}>${escapeHtml(l)}</option>`).join(""); }
+function renderPeople() {
+  $("people").innerHTML = people.length ? people.map((p, i) => `<div class="person-row" data-i="${i}">
+      <input type="text" data-f="name" value="${escapeHtml(p.name)}" placeholder="Name as in logs" aria-label="Name">
+      <input type="email" data-f="email" value="${escapeHtml(p.email)}" placeholder="email@example.org" aria-label="Email">
+      <select data-f="language" aria-label="Language">${langOptions(p.language)}</select>
+      <select data-f="role" aria-label="Role">${Object.entries(ROLES).map(([k, v]) => `<option value="${k}" ${k === p.role ? "selected" : ""}>${v}</option>`).join("")}</select>
+      <button class="x" data-remove="${i}" aria-label="Remove ${escapeHtml(p.name)}">×</button></div>`).join("")
+    : '<p class="hint" style="margin:6px 0 0">No one added yet. People are also added when you enter an email in the Send section.</p>';
+  peopleMeta();
+}
+/* Update counts and supervisor text without redrawing inputs someone may be typing in */
+function peopleMeta() {
+  const sup = people.filter(p => p.role === "supervisor").length;
+  $("teamSummary").textContent = `— ${people.length} ${people.length === 1 ? "person" : "people"}${sup ? `, ${sup} supervisor${sup === 1 ? "" : "s"}` : ""} · ${myHistory().length} saved report${myHistory().length === 1 ? "" : "s"}`;
+  if (report) renderSupNote();
+}
+$("people").addEventListener("change", (e) => {
+  const row = e.target.closest(".person-row"); if (!row) return;
+  const p = people[Number(row.dataset.i)], f = e.target.dataset.f;
+  p[f] = f === "name" ? (e.target.value.trim() || p.name) : e.target.value.trim();
+  savePeople(); peopleMeta(); renderDigest();
+});
+$("people").addEventListener("click", (e) => {
+  if (e.target.dataset.remove === undefined) return;
+  people.splice(Number(e.target.dataset.remove), 1); savePeople(); renderPeople(); renderDigest();
+});
+$("addPerson").addEventListener("click", () => {
+  people.push({ name: "", email: "", language: "English", role: people.some(p => p.role === "supervisor") ? "driver" : "supervisor" });
+  savePeople(); renderPeople();
+  const inputs = $("people").querySelectorAll("input[data-f=name]"); inputs[inputs.length - 1]?.focus();
+});
+
+function renderHistory() {
+  const list = myHistory();
+  $("historyRows").innerHTML = list.length ? list.map(h => {
+    const { findings } = runRules(JSON.parse(JSON.stringify(h.data)));
+    const crit = findings.filter(f => f.severity === "critical").length;
+    const open = findings.filter(f => f.severity !== "info" && (h.reviews[f.key]?.status || "open") === "open").length;
+    return `<tr><td>${escapeHtml(new Date(h.logDate + "T12:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" }))}</td>
+      <td>${h.data.shipments.length}</td><td>${crit}</td><td>${open}</td>
+      <td style="white-space:nowrap"><button class="small" data-open="${h.id}">Open</button> <button class="x" data-del="${h.id}" aria-label="Delete">×</button></td></tr>`;
+  }).join("") : '<tr><td colspan="5" class="hint">Reports you build are saved here.</td></tr>';
+  renderPeople();
+}
+$("historyRows").addEventListener("click", (e) => {
+  const open = e.target.dataset.open, del = e.target.dataset.del;
+  if (open) { const h = savedReports.find(x => String(x.id) === open); if (h) { $("logDate").value = h.logDate; show(h.data, false, h); setStatus(`Opened the report for ${h.logDate}.`); } }
+  if (del && confirm("Delete this saved report and its review notes from this browser?")) {
+    savedReports = savedReports.filter(x => String(x.id) !== del); saveHistory();
+    if (report?.entry && String(report.entry.id) === del) { report = null; $("report").hidden = true; }
+    renderHistory(); renderDigest();
+  }
+});
+
+/* ======================================================================
+   Claude
+   ====================================================================== */
+async function callClaude(key, system, text, maxTokens) {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, system, messages: [{ role: "user", content: text }] })
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body?.error?.message || `API error (${res.status})`);
+  return (body.content || []).filter(b => b.type === "text").map(b => b.text).join("");
+}
+function parseJson(text) {
+  const a = text.indexOf("{"), z = text.lastIndexOf("}");
+  if (a < 0 || z < 0) throw new Error("Claude didn't return structured data. Try again.");
+  return JSON.parse(text.slice(a, z + 1));
+}
 function buildPrompt(logDate) {
-  const org = ORG_TYPES[$("orgType").value] || ORG_TYPES.general;
+  const o = org(), t = ORG_TYPES[o.type] || ORG_TYPES.general;
+  const team = people.length ? `\nKnown people (use these spellings when a name in the log clearly matches): ${people.map(p => p.name).filter(Boolean).join(", ")}.` : "";
   return `You convert messy delivery, courier and chain-of-custody logs into structured data. You only extract what the log says; the app runs all compliance checks itself.
-${org.guidance ? "\nContext: " + org.guidance + "\n" : ""}
+${t.guidance ? "\nContext: " + t.guidance : ""}${o.name ? `\nOrganization: ${o.name}.` : ""}${team}
+
 The log date is ${logDate}. Use it for any time written without a date. If the log crosses midnight, move later times to the next day.
+Parts of the log may be dictated by voice and transcribed automatically: expect mis-heard words, spelled-out numbers ("seventy two degrees") and lines that start with a clock time when they were spoken.
 
 Return ONLY a JSON object, no prose and no code fences:
 {
@@ -418,118 +652,201 @@ Rules:
 - Never invent events, times, people, signatures or temperatures. If something isn't in the log, use null.
 - "signed": true only if the log says it was signed or a signature/initials were captured; false if the log says it was NOT signed or was refused; otherwise null.
 - One physical event that involves several shipments becomes an event on each shipment.
-- Keep temperatures in the unit written. Don't convert.
+- Keep temperatures in the unit written. Don't convert. A bare "degrees" in a US log is °F.
 - Category: refrigerated (2-8°C items like insulin, vaccines), frozen, ambient (room temperature goods), controlled (controlled substances), specimen (ambient lab specimens), other. Pick what the log implies; use "other" if unclear.
-- "observations" are problems only visible in the text that a timestamp/temperature/signature rule cannot catch: broken or torn seals, leaks, wrong address, damaged packaging, mislabeled items, refused deliveries, ID not checked. Do NOT repeat temperature, signature, lateness or time-gap problems there; the app finds those itself.
+- "observations" are problems only visible in the text that a timestamp/temperature/signature rule cannot catch: broken or torn seals, leaks, wrong address, damaged packaging, mislabeled items, refused deliveries, ID not checked. Use the time of the event it relates to. Do NOT repeat temperature, signature, lateness or time-gap problems there; the app finds those itself.
 - If the log contains patient names, refer to items by ID only and do not repeat the names anywhere.`;
 }
 
 async function extract() {
-  const key = $("key").value.trim();
-  const log = $("log").value.trim();
-  const logDate = $("logDate").value || isoToday();
+  const key = $("key").value.trim(), log = $("log").value.trim(), logDate = $("logDate").value || isoToday();
   if (!key) return setStatus("Add your Claude API key first, or try the demo report.", true);
-  if (!log) return setStatus("Paste or upload a log first.", true);
+  if (!log) return setStatus("Paste, upload or dictate a log first.", true);
+  if (Recorder.active) Recorder.stop();
   $("run").disabled = true; setStatus("Reading the log and building timelines…");
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-      body: JSON.stringify({ model: MODEL, max_tokens: 8000, system: buildPrompt(logDate), messages: [{ role: "user", content: `Log:\n\n${log}` }] })
-    });
-    const body = await res.json();
-    if (!res.ok) throw new Error(body?.error?.message || `API error (${res.status})`);
-    const text = (body.content || []).filter(b => b.type === "text").map(b => b.text).join("");
-    const a = text.indexOf("{"), z = text.lastIndexOf("}");
-    if (a < 0 || z < 0) throw new Error("Claude didn't return structured data. Try again.");
-    const data = JSON.parse(text.slice(a, z + 1));
-    if (!Array.isArray(data.shipments)) throw new Error("No shipments found in that log.");
-    show(data, false);
+    const data = parseJson(await callClaude(key, buildPrompt(logDate), `Log:\n\n${log}`, 8000));
+    if (!Array.isArray(data.shipments) || !data.shipments.length) throw new Error("No shipments found in that log.");
+    const entry = { id: Date.now(), orgKey: orgKey(), logDate, savedAt: new Date().toISOString(), data, reviews: {} };
+    savedReports.unshift(entry); saveHistory();
+    show(data, false, entry);
+    renderHistory(); renderDigest();
     const crit = report.findings.filter(f => f.severity === "critical").length;
-    setStatus(`Done — ${data.shipments.length} shipment${data.shipments.length === 1 ? "" : "s"}, ${crit} critical issue${crit === 1 ? "" : "s"}.`);
-  } catch (e) {
-    setStatus(e.message || "Something went wrong.", true);
-  } finally { $("run").disabled = false; }
+    setStatus(`Done — ${data.shipments.length} shipment${data.shipments.length === 1 ? "" : "s"}, ${crit} critical issue${crit === 1 ? "" : "s"}. Saved in this browser.`);
+  } catch (e) { setStatus(e.message || "Something went wrong.", true); }
+  finally { $("run").disabled = false; }
 }
 
 /* ======================================================================
-   Render
+   Render the report
    ====================================================================== */
-function show(data, isDemo) {
-  const { findings, perShip } = runRules(data);
-  report = { data, findings, perShip, isDemo, logDate: $("logDate").value || isoToday() };
-  const crit = findings.filter(f => f.severity === "critical");
-  const warn = findings.filter(f => f.severity === "warning");
-  const shipStatus = (id) => findings.some(f => f.shipment === id && f.severity === "critical") ? "critical"
-    : findings.some(f => f.shipment === id && f.severity === "warning") ? "review" : "clean";
-  const clean = data.shipments.filter(s => shipStatus(s.id) === "clean").length;
+function reviewOf(f) { return report.reviews[f.key] || { status: "open", note: "" }; }
+function isOpenF(f) { return f.severity !== "info" && reviewOf(f).status === "open"; }
 
-  $("reportMeta").textContent = `— ${ORG_TYPES[$("orgType").value].eyebrow.toLowerCase()} · ${new Date(report.logDate + "T12:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}${isDemo ? " · demo" : ""}`;
+function show(data, isDemo, entry) {
+  const { findings, perShip } = runRules(data);
+  report = { data, findings, perShip, isDemo, logDate: entry?.logDate || $("logDate").value || isoToday(), entry: entry || null,
+    reviews: entry ? entry.reviews : (report?.isDemo && isDemo ? report.reviews : {}) };
+  renderReport();
+  $("report").hidden = false;
+  $("report").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function shipStatus(id) {
+  const fs = report.findings.filter(f => f.shipment === id);
+  return fs.some(f => f.severity === "critical") ? "critical" : fs.some(f => f.severity === "warning") ? "review" : "clean";
+}
+function renderReport() {
+  const { data, findings, perShip } = report;
+  const crit = findings.filter(f => f.severity === "critical"), warn = findings.filter(f => f.severity === "warning");
+  const open = findings.filter(isOpenF);
+  const clean = data.shipments.filter(s => shipStatus(s.id) === "clean").length;
+  const o = org();
+  $("reportTitle").textContent = o.name ? `${o.name} custody report` : "Custody report";
+  $("reportMeta").textContent = `— ${(ORG_TYPES[o.type] || ORG_TYPES.general).eyebrow.toLowerCase()} · ${new Date(report.logDate + "T12:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}${report.isDemo ? " · demo" : ""}`;
   $("stats").innerHTML = `
     <div class="stat"><b>${data.shipments.length}</b><span>shipments</span></div>
     <div class="stat ${crit.length ? "crit" : ""}"><b>${crit.length}</b><span>critical issues</span></div>
     <div class="stat ${warn.length ? "warn" : ""}"><b>${warn.length}</b><span>warnings</span></div>
+    <div class="stat ${open.length ? "warn" : "ok"}"><b>${open.length}</b><span>still open</span></div>
     <div class="stat ok"><b>${clean}</b><span>clean</span></div>`;
   $("summary").textContent = data.summary || "";
 
-  $("exceptions").innerHTML = findings.length
-    ? findings.map(f => `<tr>
-        <td><span class="pill sev-${f.severity}">${f.severity}</span></td>
-        <td><b>${escapeHtml(f.shipment)}</b></td>
-        <td>${escapeHtml(f.issue)}<span class="src">${f.source === "rule" ? "Rule check" : "Noted in log"}</span></td>
-        <td>${f.time ? escapeHtml(hhmm(f.time)) : "—"}</td></tr>`).join("")
-    : '<tr><td colspan="4" style="color:var(--ok); font-weight:600">No exceptions. Every shipment passed every check.</td></tr>';
+  $("exceptions").innerHTML = findings.length ? findings.map((f, i) => {
+    const r = reviewOf(f);
+    const closed = r.status !== "open";
+    return `<tr class="${closed ? "is-closed" : ""}">
+      <td><span class="pill sev-${f.severity}">${f.severity}</span></td>
+      <td><b>${escapeHtml(f.shipment)}</b></td>
+      <td>${escapeHtml(f.issue)}<span class="src">${f.source === "rule" ? "Rule check" : "Noted in log"}${f.people.length ? " · " + escapeHtml(f.people.join(", ")) : ""}</span></td>
+      <td>${f.time ? escapeHtml(hhmm(f.time)) : "—"}</td>
+      <td class="rev">${f.severity === "info" ? '<span class="hint">For information</span>' : `
+        <select data-rev="${i}" class="rev-${r.status}" aria-label="Review status">${Object.entries(REVIEW).map(([k, v]) => `<option value="${k}" ${k === r.status ? "selected" : ""}>${v}</option>`).join("")}</select>
+        <input type="text" data-note="${i}" value="${escapeHtml(r.note)}" placeholder="${closed ? "What was done?" : "Action taken / note"}" aria-label="Corrective action note">`}</td></tr>`;
+  }).join("") : '<tr><td colspan="5" style="color:var(--ok); font-weight:600">No exceptions. Every shipment passed every check.</td></tr>';
 
   $("shipments").innerHTML = data.shipments.map(s => {
-    const r = perShip.get(s.id); const st = shipStatus(s.id);
-    const stLabel = { clean: "Clean", review: "Needs review", critical: "Critical" }[st];
+    const r = perShip.get(s.id), st = shipStatus(s.id);
     const [lo, hi] = ranges[s.category] || [null, null];
     const rangeTxt = lo === null && hi === null ? "" : ` · range ${lo ?? "—"} to ${hi ?? "—"}°C`;
     const items = r.evs.map((e, i) => {
       const c = toC(e.temp, e.temp_unit);
       const bad = c !== null && ((lo !== null && c < lo) || (hi !== null && c > hi));
-      const people = e.from || e.to ? `${escapeHtml(e.from || "?")} → ${escapeHtml(e.to || "?")}` : (e.handler ? escapeHtml(e.handler) : "");
+      const ppl = e.from || e.to ? `${escapeHtml(e.from || "?")} → ${escapeHtml(e.to || "?")}` : (e.handler ? escapeHtml(e.handler) : "");
       const sig = e.signed === true ? '<span class="chip okc">signed</span>' : e.signed === false ? '<span class="chip bad">not signed</span>' : "";
       const fl = (r.flags.get(i) || []).map(f => `<span class="flag ${f.sev === "w" ? "w" : ""}">⚠ ${escapeHtml(f.text)}</span>`).join(" ");
-      const gap = r.gaps?.get(i) ? `<div class="gapnote">${mins(r.gaps.get(i))} with no log entry before this</div>` : "";
-      return `${gap ? `<li style="border-bottom:none; padding-bottom:0">${gap}</li>` : ""}<li>
-        <div class="t-time">${escapeHtml(hhmm(e.time))}</div>
-        <div>
-          <span class="t-type">${escapeHtml(String(e.type || "event").replace("_", " "))}</span>
-          ${e.location ? ` · ${escapeHtml(e.location)}` : ""}${sig}
+      const gap = r.gaps.get(i) ? `<li style="border-bottom:none; padding-bottom:0"><div class="gapnote">${mins(r.gaps.get(i))} with no log entry before this</div></li>` : "";
+      return `${gap}<li><div class="t-time">${escapeHtml(hhmm(e.time))}</div><div>
+          <span class="t-type">${escapeHtml(String(e.type || "event").replace("_", " "))}</span>${e.location ? ` · ${escapeHtml(e.location)}` : ""}${sig}
           ${c !== null ? `<span class="chip ${bad ? "bad" : "okc"}">${escapeHtml(fmtTemp(e.temp, e.temp_unit))}</span>` : ""}
-          <div class="t-detail">${people}${people && e.note ? " · " : ""}${e.note ? escapeHtml(e.note) : ""}</div>
-          ${fl}
-        </div></li>`;
+          <div class="t-detail">${ppl}${ppl && e.note ? " · " : ""}${e.note ? escapeHtml(e.note) : ""}</div>${fl}</div></li>`;
     }).join("");
-    return `<div class="ship">
-      <div class="ship-head">
-        <div><h3>${escapeHtml(s.id)} <span class="pill st-${st}">${stLabel}</span></h3>
+    return `<div class="ship"><div class="ship-head">
+        <div><h3>${escapeHtml(s.id)} <span class="pill st-${st}">${{ clean: "Clean", review: "Needs review", critical: "Critical" }[st]}</span></h3>
           <div class="meta">${escapeHtml(s.item || "")} · ${escapeHtml(CATEGORIES[s.category])}${rangeTxt}</div></div>
-        <div class="meta">${escapeHtml(s.origin || "?")} → ${escapeHtml(s.destination || "?")}${validTime(s.due) ? ` · due ${escapeHtml(hhmm(s.due))}` : ""}</div>
-      </div>
-      <ol class="timeline">${items || '<li><div></div><div class="t-detail">No timestamped events.</div></li>'}</ol>
-    </div>`;
+        <div class="meta">${escapeHtml(s.origin || "?")} → ${escapeHtml(s.destination || "?")}${validTime(s.due) ? ` · due ${escapeHtml(hhmm(s.due))}` : ""}</div></div>
+      <ol class="timeline">${items || '<li><div></div><div class="t-detail">No timestamped events.</div></li>'}</ol></div>`;
   }).join("");
-
-  $("report").hidden = false;
-  $("report").scrollIntoView({ behavior: "smooth", block: "start" });
+  renderSend();
 }
+
+/* Review edits: saved with the report, and everything downstream updates */
+function persistReviews() { if (report.entry) { report.entry.reviews = report.reviews; saveHistory(); renderHistory(); renderDigest(); } }
+$("exceptions").addEventListener("change", (e) => {
+  const ri = e.target.dataset.rev, ni = e.target.dataset.note;
+  if (ri !== undefined) {
+    const f = report.findings[Number(ri)];
+    report.reviews[f.key] = { ...reviewOf(f), status: e.target.value, at: new Date().toISOString() };
+    persistReviews(); renderReport();
+    setStatus(`Marked "${REVIEW[e.target.value]}".${report.isDemo ? " (Demo changes aren't saved.)" : ""}`);
+  } else if (ni !== undefined) {
+    const f = report.findings[Number(ni)];
+    report.reviews[f.key] = { ...reviewOf(f), note: e.target.value.trim(), at: new Date().toISOString() };
+    persistReviews();
+  }
+});
+
+/* ======================================================================
+   Sending: each person gets their own open exceptions, in their language
+   ====================================================================== */
+function peopleWithIssues() {
+  const map = new Map();
+  report.findings.filter(isOpenF).forEach(f => f.people.forEach(n => {
+    const k = n.toLowerCase(); if (!map.has(k)) map.set(k, { name: n, items: [] }); map.get(k).items.push(f);
+  }));
+  return [...map.values()].sort((a, b) => b.items.length - a.items.length);
+}
+function renderSend() {
+  const list = peopleWithIssues();
+  $("sendRows").innerHTML = list.length ? list.map((p, i) => {
+    const rec = findPerson(p.name) || {};
+    const c = p.items.filter(f => f.severity === "critical").length;
+    return `<div class="send-row">
+      <div class="who"><b>${escapeHtml(p.name)}</b><span>${p.items.length} open${c ? `, ${c} critical` : ""}</span></div>
+      <input type="email" data-pe="${escapeHtml(p.name)}" value="${escapeHtml(rec.email || "")}" placeholder="email" aria-label="${escapeHtml(p.name)} email">
+      <select data-pl="${escapeHtml(p.name)}" aria-label="${escapeHtml(p.name)} language">${langOptions(rec.language)}</select>
+      <button class="small" data-send="${i}">Email</button></div>`;
+  }).join("") : '<p class="hint" style="margin:10px 0 0">No open exceptions are tied to a person.</p>';
+  renderSupNote();
+}
+function renderSupNote() {
+  const sup = supervisors();
+  $("supNote").innerHTML = sup.length
+    ? `Sends the full report, including review notes, to ${sup.map(p => escapeHtml(p.name)).join(", ")}.`
+    : 'Mark someone as <b>Supervisor</b> under "Team &amp; saved reports" to send them reports and the weekly digest.';
+}
+$("sendRows").addEventListener("change", (e) => {
+  if (e.target.dataset.pe) upsertPerson(e.target.dataset.pe, { email: e.target.value.trim() });
+  if (e.target.dataset.pl) upsertPerson(e.target.dataset.pl, { language: e.target.value });
+});
+$("sendRows").addEventListener("click", async (e) => {
+  const i = e.target.dataset.send; if (i === undefined) return;
+  const p = peopleWithIssues()[Number(i)], rec = findPerson(p.name) || {};
+  let mail = personEmail(p);
+  if (rec.language && rec.language !== "English") {
+    const key = $("key").value.trim();
+    if (!key) return setStatus(`Add your API key above to translate into ${rec.language}, or set ${p.name}'s language to English.`, true);
+    e.target.disabled = true; setStatus(`Translating ${p.name}'s email into ${rec.language}…`);
+    try {
+      const sys = `Translate the email the user gives you into ${rec.language}. Keep it respectful, plain and natural for a driver or courier. Keep names, IDs, times, temperatures and numbers exactly as written. Return ONLY JSON: {"subject": string, "body": string}`;
+      mail = parseJson(await callClaude(key, sys, `Subject: ${mail.subject}\n\n${mail.body}`, 2000));
+      setStatus(`Opened ${p.name}'s email in ${rec.language}.`);
+    } catch (err) { setStatus(err.message, true); e.target.disabled = false; return; }
+    e.target.disabled = false;
+  }
+  openMail(rec.email, mail.subject, mail.body);
+});
+function openMail(to, subject, body) {
+  location.href = `mailto:${(to || "").split(",").map(x => encodeURIComponent(x.trim())).join(",").replace(/%40/g, "@")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+function dateLabel(iso) { return new Date(iso + "T12:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" }); }
+function personEmail(p) {
+  const lines = [`Hi ${p.name.split(" ")[0]},`, "", `The custody log for ${dateLabel(report.logDate)} shows ${p.items.length === 1 ? "an item" : `${p.items.length} items`} that need${p.items.length === 1 ? "s" : ""} a follow-up from you:`, ""];
+  p.items.forEach((f, i) => lines.push(`${i + 1}. [${f.shipment}]${f.time ? ` ${hhmm(f.time)}` : ""} ${f.issue}${f.severity === "critical" ? " (critical)" : ""}`));
+  lines.push("", "Please reply with what happened, or anything the log is missing, so we can close these out.", "", "Thank you!");
+  return { subject: `Custody log follow-up: ${dateLabel(report.logDate)}`, body: lines.join("\n") };
+}
+$("emailReport").addEventListener("click", () => {
+  if (!report) return;
+  const crit = report.findings.filter(f => f.severity === "critical").length;
+  openMail(supervisors().map(p => p.email).join(","), `${crit ? `${crit} critical issue${crit === 1 ? "" : "s"}: ` : ""}${reportTitle()}`, plainReport());
+});
 
 /* ======================================================================
    Exports
    ====================================================================== */
-function reportTitle() {
-  return `Chain-of-custody report — ${new Date(report.logDate + "T12:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}`;
-}
+function reportTitle() { const o = org(); return `${o.name ? o.name + " " : ""}chain-of-custody report — ${dateLabel(report.logDate)}`.replace(/^c/, "C"); }
 function plainReport() {
   const f = report.findings, d = report.data;
   const lines = [reportTitle(), "", d.summary || "", "",
-    `${d.shipments.length} shipments · ${f.filter(x => x.severity === "critical").length} critical · ${f.filter(x => x.severity === "warning").length} warnings`, ""];
+    `${d.shipments.length} shipments · ${f.filter(x => x.severity === "critical").length} critical · ${f.filter(x => x.severity === "warning").length} warnings · ${f.filter(isOpenF).length} still open`, ""];
   for (const sev of ["critical", "warning", "info"]) {
     const list = f.filter(x => x.severity === sev); if (!list.length) continue;
     lines.push(sev.toUpperCase());
-    list.forEach(x => lines.push(`- [${x.shipment}]${x.time ? " " + hhmm(x.time) : ""} ${x.issue}${x.source === "claude" ? " (noted in log)" : ""}`));
+    list.forEach(x => {
+      const r = reviewOf(x);
+      lines.push(`- [${x.shipment}]${x.time ? " " + hhmm(x.time) : ""} ${x.issue}${x.source === "claude" ? " (noted in log)" : ""}`);
+      if (sev !== "info") lines.push(`    Status: ${REVIEW[r.status]}${r.note ? ` — ${r.note}` : ""}`);
+    });
     lines.push("");
   }
   lines.push("TIMELINES");
@@ -545,18 +862,15 @@ function download(name, text, type = "text/csv") {
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
-async function copy(text, msg) {
-  try { await navigator.clipboard.writeText(text); setStatus(msg); } catch { setStatus("Couldn't copy — your browser blocked clipboard access.", true); }
+async function copy(text, msg) { try { await navigator.clipboard.writeText(text); setStatus(msg); } catch { setStatus("Couldn't copy — your browser blocked clipboard access.", true); } }
+function slug() { return (org().name || "custody").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "custody"; }
+function exceptionRows() {
+  return report.findings.map(f => { const r = reviewOf(f); return [f.severity, f.shipment, f.issue, f.time ? f.time.replace("T", " ") : "", f.people.join("; "), f.source === "rule" ? "Rule check" : "Noted in log", f.severity === "info" ? "" : REVIEW[r.status], r.note || ""]; });
 }
+const EXC_HEAD = ["Severity", "Shipment", "Issue", "Time", "People", "Source", "Review status", "Action taken"];
 $("copyReport").addEventListener("click", () => report && copy(plainReport(), "Incident report copied."));
-$("emailReport").addEventListener("click", () => {
-  if (!report) return;
-  const crit = report.findings.filter(f => f.severity === "critical").length;
-  const subject = `${crit ? `${crit} critical issue${crit === 1 ? "" : "s"}: ` : ""}${reportTitle()}`;
-  location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainReport())}`;
-});
-$("csvExceptions").addEventListener("click", () => report && download(`custody-exceptions-${report.logDate}.csv`,
-  csv([["Severity", "Shipment", "Issue", "Time", "Source"], ...report.findings.map(f => [f.severity, f.shipment, f.issue, f.time ? f.time.replace("T", " ") : "", f.source === "rule" ? "Rule check" : "Noted in log"])])));
+$("copySheets").addEventListener("click", () => report && copy([EXC_HEAD, ...exceptionRows()].map(r => r.map(c => String(c).replace(/[\t\n]/g, " ")).join("\t")).join("\n"), "Copied. Click a cell in Google Sheets or Excel and paste."));
+$("csvExceptions").addEventListener("click", () => report && download(`${slug()}-exceptions-${report.logDate}.csv`, csv([EXC_HEAD, ...exceptionRows()])));
 $("csvTimeline").addEventListener("click", () => {
   if (!report) return;
   const rows = [["Shipment", "Item", "Category", "Time", "Event", "Location", "From", "To", "Signed", "Temp", "Unit", "Temp °C", "Note"]];
@@ -564,48 +878,183 @@ $("csvTimeline").addEventListener("click", () => {
     const c = toC(e.temp, e.temp_unit);
     rows.push([s.id, s.item, CATEGORIES[s.category], e.time.replace("T", " "), e.type, e.location, e.from || e.handler, e.to, e.signed === true ? "yes" : e.signed === false ? "NO" : "", e.temp ?? "", e.temp_unit ?? "", c === null ? "" : c.toFixed(1), e.note]);
   }));
-  download(`custody-timeline-${report.logDate}.csv`, csv(rows));
+  download(`${slug()}-timeline-${report.logDate}.csv`, csv(rows));
 });
 $("print").addEventListener("click", () => window.print());
 
 /* ======================================================================
-   Settings + wiring
+   Weekly digest across saved reports
    ====================================================================== */
+function digestData() {
+  const today = isoToday();
+  const from = new Date(today + "T12:00"); from.setDate(from.getDate() - 6);
+  const fromIso = from.toISOString().slice(0, 10);
+  const entries = myHistory().filter(h => h.logDate >= fromIso && h.logDate <= today);
+  const all = [];
+  entries.forEach(h => runRules(JSON.parse(JSON.stringify(h.data))).findings.forEach(f => all.push({ ...f, logDate: h.logDate, review: h.reviews[f.key] || { status: "open" } })));
+  const real = all.filter(f => f.severity !== "info");
+  const byRule = new Map(), byPerson = new Map();
+  real.forEach(f => {
+    byRule.set(f.rule, (byRule.get(f.rule) || 0) + 1);
+    f.people.forEach(n => { const k = n.toLowerCase(); const v = byPerson.get(k) || { name: n, n: 0, c: 0 }; v.n++; if (f.severity === "critical") v.c++; byPerson.set(k, v); });
+  });
+  return { fromIso, today, entries, all: real,
+    shipments: entries.reduce((n, h) => n + h.data.shipments.length, 0),
+    critical: real.filter(f => f.severity === "critical"),
+    openCritical: real.filter(f => f.severity === "critical" && f.review.status === "open"),
+    open: real.filter(f => f.review.status === "open"),
+    rules: [...byRule.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6),
+    people: [...byPerson.values()].sort((a, b) => b.n - a.n).slice(0, 6) };
+}
+function renderDigest() {
+  const d = digestData();
+  $("digestPanel").hidden = d.entries.length === 0;
+  if (!d.entries.length) return;
+  $("digestMeta").textContent = `— ${prettyShort(d.fromIso)} to ${prettyShort(d.today)} · ${d.entries.length} report${d.entries.length === 1 ? "" : "s"}`;
+  $("digestStats").innerHTML = `
+    <div class="stat"><b>${d.shipments}</b><span>shipments</span></div>
+    <div class="stat ${d.critical.length ? "crit" : ""}"><b>${d.critical.length}</b><span>critical issues</span></div>
+    <div class="stat ${d.openCritical.length ? "crit" : "ok"}"><b>${d.openCritical.length}</b><span>critical still open</span></div>
+    <div class="stat ${d.open.length ? "warn" : "ok"}"><b>${d.open.length}</b><span>open in total</span></div>`;
+  const max = Math.max(1, ...d.rules.map(r => r[1]), ...d.people.map(p => p.n));
+  $("digestRules").innerHTML = d.rules.length ? d.rules.map(([r, n]) => `<tr><td>${escapeHtml(RULE_LABEL[r] || r)}</td><td style="width:35%"><div class="bar" style="width:${n / max * 100}%"></div></td><td class="num">${n}</td></tr>`).join("") : '<tr><td class="hint">No issues this week.</td></tr>';
+  $("digestPeople").innerHTML = d.people.length ? d.people.map(p => `<tr><td>${escapeHtml(p.name)}</td><td style="width:35%"><div class="bar ${p.c ? "c" : ""}" style="width:${p.n / max * 100}%"></div></td><td class="num">${p.n}${p.c ? ` <span class="hint">(${p.c} critical)</span>` : ""}</td></tr>`).join("") : '<tr><td class="hint">No issues tied to a person.</td></tr>';
+  $("digestOpen").innerHTML = d.openCritical.length ? `<h3 style="margin-top:16px">Critical issues still open</h3><div class="table-wrap"><table><tbody>${d.openCritical.map(f => `<tr><td style="white-space:nowrap">${escapeHtml(prettyShort(f.logDate))}</td><td><b>${escapeHtml(f.shipment)}</b></td><td>${escapeHtml(f.issue)}</td></tr>`).join("")}</tbody></table></div>` : "";
+}
+function prettyShort(iso) { return new Date(iso + "T12:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }); }
+function digestText() {
+  const d = digestData(), o = org();
+  const out = [`Weekly custody exception digest${o.name ? ` — ${o.name}` : ""}`, `${prettyShort(d.fromIso)} to ${prettyShort(d.today)} · ${d.entries.length} report${d.entries.length === 1 ? "" : "s"} · ${d.shipments} shipments`, "",
+    `${d.critical.length} critical issues · ${d.openCritical.length} critical still open · ${d.open.length} open in total`, "", "MOST COMMON ISSUES"];
+  d.rules.forEach(([r, n]) => out.push(`- ${RULE_LABEL[r] || r}: ${n}`));
+  out.push("", "PEOPLE MOST INVOLVED");
+  d.people.forEach(p => out.push(`- ${p.name}: ${p.n}${p.c ? ` (${p.c} critical)` : ""}`));
+  if (d.openCritical.length) { out.push("", "CRITICAL STILL OPEN"); d.openCritical.forEach(f => out.push(`- ${prettyShort(f.logDate)} [${f.shipment}] ${f.issue}`)); }
+  out.push("", `Open the tool: ${shareUrl({ digest: "1" })}`);
+  return out.join("\n");
+}
+$("emailDigest").addEventListener("click", () => openMail(supervisors().map(p => p.email).join(","), `Weekly custody digest${org().name ? ` — ${org().name}` : ""} (${prettyShort(isoToday())})`, digestText()));
+$("copyDigest").addEventListener("click", () => copy(digestText(), "Digest copied."));
+$("icsDigest").addEventListener("click", () => {
+  const d = new Date(); d.setHours(9, 0, 0, 0); d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));
+  const pad = (n) => String(n).padStart(2, "0");
+  const start = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T090000`;
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+  const url = shareUrl({ digest: "1" });
+  const esc = (s) => s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
+  download(`${slug()}-monday-digest.ics`, ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Custody Log Summarizer//EN", "BEGIN:VEVENT",
+    `UID:${Date.now()}@custody-summarizer`, `DTSTAMP:${stamp}`, `DTSTART:${start}`, "DURATION:PT15M", "RRULE:FREQ=WEEKLY;BYDAY=MO",
+    `SUMMARY:${esc(`Send weekly custody digest${org().name ? ` (${org().name})` : ""}`)}`, `DESCRIPTION:${esc(`Open the tool and click "Email digest":\n${url}`)}`, `URL:${url}`,
+    "BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:Weekly custody digest", "TRIGGER:PT0M", "END:VALARM", "END:VEVENT", "END:VCALENDAR"].join("\r\n"), "text/calendar");
+  setStatus("Calendar reminder downloaded. Open it to add a Monday 9am reminder that links back here.");
+});
+
+/* ======================================================================
+   Dictation (browser speech recognition)
+   ====================================================================== */
+const Recorder = {
+  rec: null, active: false, started: 0, timer: null, wakeLock: null,
+  supported() { return !!(window.SpeechRecognition || window.webkitSpeechRecognition); },
+  start() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    this.rec = new SR(); this.rec.lang = $("recLang").value; this.rec.continuous = true; this.rec.interimResults = true;
+    this.rec.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript.trim(); if (!t) continue;
+        if (e.results[i].isFinal) addDictated(t); else interim += t + " ";
+      }
+      $("interim").textContent = interim;
+    };
+    this.rec.onerror = (e) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") { this.stop(); recHelp("Microphone access was blocked. Allow the microphone for this site in your browser settings.", true); }
+      else if (e.error === "network") recHelp("Dictation needs an internet connection. Still trying…", true);
+    };
+    this.rec.onend = () => { if (this.active) { try { this.rec.start(); } catch {} } };
+    try { this.rec.start(); } catch (err) { recHelp("Couldn't start the microphone: " + err.message, true); return; }
+    this.active = true; this.started = Date.now();
+    $("recBtn").classList.add("recording"); $("recLabel").textContent = "Stop dictating"; $("recLang").disabled = true;
+    recHelp("Listening… Say the shipment ID, what happened, who signed, and the temperature.");
+    this.timer = setInterval(() => { const s = Math.floor((Date.now() - this.started) / 1000); $("recTimer").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }, 500);
+    if (navigator.wakeLock?.request) navigator.wakeLock.request("screen").then(l => this.wakeLock = l).catch(() => {});
+  },
+  stop() {
+    this.active = false; try { this.rec?.stop(); } catch {}
+    clearInterval(this.timer); $("recBtn").classList.remove("recording"); $("recLabel").textContent = "Start dictating";
+    $("recLang").disabled = false; $("interim").textContent = ""; try { this.wakeLock?.release(); } catch {} this.wakeLock = null;
+    recHelp("Stopped. Check the dictated lines in the log for misheard IDs or names, then build the report.");
+  }
+};
+function addDictated(text) {
+  const now = new Date(), stamp = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const line = ($("stampLines").checked ? stamp + " " : "") + text.charAt(0).toUpperCase() + text.slice(1);
+  const t = $("log"); t.value += (t.value && !t.value.endsWith("\n") ? "\n" : "") + line; t.scrollTop = t.scrollHeight;
+}
+function recHelp(msg, err = false) { $("recHelp").textContent = msg; $("recHelp").classList.toggle("error", err); }
+$("recBtn").addEventListener("click", () => {
+  if (!Recorder.supported()) return recHelp("Dictation isn't available in this browser. Use Chrome, Edge or Safari (iPhone or Mac), or type instead.", true);
+  Recorder.active ? Recorder.stop() : Recorder.start();
+});
+
+/* ======================================================================
+   Backup, tailored link, settings, start-up
+   ====================================================================== */
+$("exportBackup").addEventListener("click", () => {
+  download(`${slug()}-custody-backup-${isoToday()}.json`, JSON.stringify({ app: "chain-of-custody-summarizer", version: 1, exportedAt: new Date().toISOString(), org: org(), people, reports: myHistory() }, null, 2), "application/json");
+  setStatus("Backup downloaded. It may contain sensitive details; store it somewhere secure.");
+});
+$("importBtn").addEventListener("click", () => $("importFile").click());
+$("importFile").addEventListener("change", async () => {
+  const file = $("importFile").files[0]; if (!file) return;
+  try {
+    const b = JSON.parse(await file.text());
+    if (b.app !== "chain-of-custody-summarizer" || !Array.isArray(b.reports)) throw new Error("That file isn't a backup from this tool.");
+    const have = new Set(savedReports.map(h => String(h.id)));
+    const incoming = b.reports.filter(r => !have.has(String(r.id))).map(r => ({ ...r, orgKey: orgKey(), reviews: r.reviews || {} }));
+    savedReports = [...incoming, ...savedReports]; saveHistory();
+    (b.people || []).forEach(p => { if (p.name && !findPerson(p.name)) people.push(p); }); savePeople();
+    renderHistory(); renderDigest();
+    setStatus(`Imported ${incoming.length} report${incoming.length === 1 ? "" : "s"}.`);
+  } catch (err) { setStatus(err.message || "Couldn't read that file.", true); }
+  $("importFile").value = "";
+});
+function shareUrl(extra = {}) {
+  const o = org(), p = new URLSearchParams({ type: o.type });
+  if (o.name) p.set("org", o.name);
+  Object.entries(extra).forEach(([k, v]) => p.set(k, v));
+  return `${location.origin}${location.pathname}?${p}`;
+}
+$("shareLink").addEventListener("click", () => copy(shareUrl(), "Tailored link copied. Teammates who open it get your organization's setup."));
+
 function renderRanges() {
-  $("ranges").innerHTML = Object.entries(CATEGORIES).map(([k, label]) => `<tr>
-    <td>${label}</td>
+  $("ranges").innerHTML = Object.entries(CATEGORIES).map(([k, label]) => `<tr><td>${label}</td>
     <td><input type="number" step="0.5" data-k="${k}" data-i="0" value="${ranges[k][0] ?? ""}" aria-label="${label} minimum" style="max-width:110px"></td>
     <td><input type="number" step="0.5" data-k="${k}" data-i="1" value="${ranges[k][1] ?? ""}" aria-label="${label} maximum" style="max-width:110px"></td></tr>`).join("");
   $("rangeSummary").textContent = `— refrigerated ${ranges.refrigerated[0] ?? "—"} to ${ranges.refrigerated[1] ?? "—"}°C, frozen at or below ${ranges.frozen[1] ?? "—"}°C`;
 }
+function rerun() { if (report) { const keep = report.reviews; show(report.data, report.isDemo, report.entry); if (report.isDemo) { report.reviews = keep; renderReport(); } } renderHistory(); renderDigest(); }
 $("ranges").addEventListener("change", (e) => {
   const k = e.target.dataset.k, i = Number(e.target.dataset.i); if (!k) return;
   ranges[k][i] = e.target.value === "" ? null : Number(e.target.value);
-  writeStore("coc-ranges-v1", ranges); renderRanges();
-  if (report) show(report.data, report.isDemo);
+  writeStore("coc-ranges-v1", ranges); renderRanges(); rerun();
 });
-["maxGap", "lateGrace"].forEach(id => $(id).addEventListener("change", () => {
-  writeStore("coc-opts-v1", { maxGap: $("maxGap").value, lateGrace: $("lateGrace").value });
-  if (report) show(report.data, report.isDemo);
-}));
+["maxGap", "lateGrace"].forEach(id => $(id).addEventListener("change", () => { writeStore("coc-opts-v1", { maxGap: $("maxGap").value, lateGrace: $("lateGrace").value }); rerun(); }));
 $("orgType").innerHTML = Object.entries(ORG_TYPES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("");
-$("orgType").addEventListener("change", () => {
-  writeStore("coc-org-v1", $("orgType").value);
-  $("eyebrow").textContent = ORG_TYPES[$("orgType").value].eyebrow;
-  $("privacy").hidden = $("orgType").value === "food" || $("orgType").value === "general";
-  if (report) show(report.data, report.isDemo);
-});
+$("orgType").addEventListener("change", () => { applyOrg(); if (report) renderReport(); });
+$("orgName").addEventListener("change", () => { applyOrg(); if (report) renderReport(); });
+$("recLang").innerHTML = REC_LANGS.map(([c, n]) => `<option value="${c}">${n}</option>`).join("");
 $("file").addEventListener("change", async () => {
   const f = $("file").files[0]; if (!f) return;
   if (f.size > 400000) { setStatus("That file is over 400 KB. Split it into smaller logs, like one day or route at a time.", true); $("file").value = ""; return; }
   $("log").value = await f.text(); $("fileNote").textContent = `Loaded ${f.name}`; $("file").value = "";
 });
-$("sample").addEventListener("click", () => { $("orgType").value = "medical"; $("orgType").dispatchEvent(new Event("change")); $("log").value = SAMPLE_LOG; setStatus("Sample log loaded."); });
+$("sample").addEventListener("click", () => { if ($("orgType").value === "general" || $("orgType").value === "food") { $("orgType").value = "medical"; applyOrg(); } $("log").value = SAMPLE_LOG; setStatus("Sample log loaded."); });
 $("demo").addEventListener("click", () => {
-  $("orgType").value = "medical"; $("orgType").dispatchEvent(new Event("change"));
+  if ($("orgType").value === "general" || $("orgType").value === "food") { $("orgType").value = "medical"; applyOrg(); }
   $("log").value = SAMPLE_LOG;
-  show(demoExtraction($("logDate").value || isoToday()), true);
-  setStatus("Showing a demo. Try changing the temperature ranges or time limits; the checks rerun instantly.");
+  report = null;
+  show(demoExtraction($("logDate").value || isoToday()), true, null);
+  setStatus("Showing a demo. Try marking an exception resolved, or changing a temperature range; everything updates instantly.");
 });
 $("run").addEventListener("click", extract);
 
@@ -613,11 +1062,14 @@ $("run").addEventListener("click", extract);
 ranges = Object.assign(JSON.parse(JSON.stringify(DEFAULT_RANGES)), readStore("coc-ranges-v1", {}));
 const savedOpts = readStore("coc-opts-v1", null);
 if (savedOpts) { $("maxGap").value = savedOpts.maxGap; $("lateGrace").value = savedOpts.lateGrace; }
-const savedOrg = readStore("coc-org-v1", "medical");
-$("orgType").value = ORG_TYPES[savedOrg] ? savedOrg : "medical";
-$("orgType").dispatchEvent(new Event("change"));
+const params = new URLSearchParams(location.search);
+const savedOrg = readStore(ORG_KEY, null) || { type: readStore("coc-org-v1", "medical"), name: "" };
+$("orgType").value = ORG_TYPES[params.get("type")] ? params.get("type") : (ORG_TYPES[savedOrg.type] ? savedOrg.type : "medical");
+$("orgName").value = params.get("org") !== null ? params.get("org").slice(0, 60) : (savedOrg.name || "");
 $("logDate").value = isoToday();
-renderRanges();
+renderRanges(); applyOrg(); renderPeople(); renderHistory(); renderDigest();
+if (params.get("digest") && !$("digestPanel").hidden) setTimeout(() => $("digestPanel").scrollIntoView({ block: "start" }), 300);
+if (location.search) window.history.replaceState(null, "", location.pathname);
 </script>
 </body>
 </html>

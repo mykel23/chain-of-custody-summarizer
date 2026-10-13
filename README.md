@@ -1,6 +1,6 @@
 # Chain-of-Custody Log Summarizer
 
-A web tool that turns messy courier, specimen and cold-chain delivery logs into a clear **custody report**: a timeline for every shipment, plus a ranked list of problems such as temperature excursions, unsigned handoffs, breaks in custody, unaccounted time and late deliveries. It uses Claude through the Anthropic API.
+A web tool that turns messy courier, specimen and cold-chain delivery logs into a clear **custody report**: a timeline for every shipment, plus a ranked list of problems such as temperature excursions, unsigned handoffs, breaks in custody, unaccounted time and late deliveries. Supervisors review and close each exception, drivers get their own follow-ups in their language, and a weekly digest shows recurring problems. It uses Claude through the Anthropic API.
 
 **Live demo: [mykel23.github.io/chain-of-custody-summarizer](https://mykel23.github.io/chain-of-custody-summarizer/)** (click "See demo report", no API key needed)
 
@@ -14,7 +14,7 @@ Small clinics, labs and food banks often don't have software for this. I built a
 
 ## What it does
 
-- **Reads any log format:** pasted driver notes, CSV or text exports, temperature logs, or a mix. Upload a file or paste it in.
+- **Reads any log format:** pasted driver notes, CSV or text exports, temperature logs, or a mix. Upload a file, paste it in, or **dictate it**: drivers can speak their notes at each stop, and each line is stamped with the time it was said.
 - **Builds a timeline for each shipment:** pickup, handoffs, scans and delivery, with who released and received it, signatures, and temperatures (°F readings are converted to °C).
 - **Flags problems, most serious first:**
   - Temperature above or below the allowed range for that type of item
@@ -24,9 +24,13 @@ Small clinics, labs and food banks often don't have software for this. I built a
   - Late or missing delivery confirmations
   - Temperature-controlled shipments with no readings
   - Problems only visible in the text, like a torn seal, leak or wrong address
-- **Exports for follow-up:** copy an incident report, email it to a supervisor, download exception and full-timeline CSVs, or print to PDF.
+- **Review and close exceptions:** mark each one Open, Resolved or Not an issue, with a note on what was done. Review notes are saved with the report and included in every export, which gives you an audit trail.
+- **Email each person their own exceptions,** translated by Claude into their preferred language, with ready-to-send drafts in your own email app. Supervisors get the full report, including review notes.
+- **Weekly exception digest** across saved reports: the most common issues, the people most often involved, and critical issues still open. Email it to supervisors, or add a Monday calendar reminder.
+- **Team roster and saved reports:** drivers and supervisors with emails and languages, and a history of past reports to reopen. Everything stays in the browser; a backup file moves it between devices.
+- **Exports for follow-up:** copy an incident report, paste exceptions into Google Sheets or Excel, download exception and full-timeline CSVs, or print to PDF.
 - **Adjustable rules:** temperature ranges per category, how much unaccounted time to allow, and a grace period for lateness. Changes rerun the checks instantly.
-- **Tailored for the work:** medical courier, lab specimen transport, pharmacy delivery, food bank cold chain, or general logistics.
+- **Tailored for the work:** add your organization's name and pick medical courier, lab specimen transport, pharmacy delivery, food bank cold chain, or general logistics. **Copy tailored link** gives teammates the same setup.
 
 ## How it works
 
@@ -57,9 +61,9 @@ These are common defaults, not regulatory advice. Every range is editable, so se
 
 ## Privacy
 
-- The page reminds medical users not to paste patient names or other protected health information; IDs work fine.
+- The page reminds medical users not to paste or dictate patient names or other protected health information; IDs work fine.
 - Claude is instructed to refer to items by ID only and never repeat patient names.
-- Nothing is stored except the user's own settings, in their browser.
+- Raw logs are never saved. Structured reports, review notes and the team roster are saved **only in the user's browser**. Unlike my meeting tool, there's deliberately no shared online sync, because custody records can contain medical details. Teams move history with a backup file they control.
 
 ## Limits
 
@@ -67,8 +71,13 @@ These are common defaults, not regulatory advice. Every range is editable, so se
 - Times are read as local time, and a time with no date uses the log date you pick.
 - Confirm critical findings against the original records before acting on them.
 
+## Limits (continued)
+
+- Dictation works in Chrome, Edge and Safari, and the browser's speech service (Google or Apple) processes the audio.
+- The weekly digest is one click plus a calendar reminder, not sent automatically, since there's no server.
+
 ## Ideas for next steps
 
 - Photograph a paper delivery manifest and read it with Claude's vision
-- Track a driver's or route's exceptions over weeks to spot recurring problems
-- Corrective-action notes on each exception, for audit trails
+- Per-route trends over months, not just weeks
+- Optional encrypted shared storage for larger teams
