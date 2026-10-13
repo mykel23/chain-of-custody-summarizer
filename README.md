@@ -14,19 +14,22 @@ Small clinics, labs and food banks often don't have software for this. I built a
 
 ## What it does
 
-- **Reads any log format:** pasted driver notes, CSV or text exports, temperature logs, or a mix. Upload a file, paste it in, or **dictate it**: drivers can speak their notes at each stop, and each line is stamped with the time it was said.
+- **Reads any log format:** pasted driver notes, CSV or text exports, temperature logs, or a mix. Upload a file, paste it in, **photograph a paper manifest** (Claude's vision transcribes it, marking anything unreadable as [illegible] for the user to check), or **dictate it**: drivers can speak their notes at each stop, and each line is stamped with the time it was said.
 - **Builds a timeline for each shipment:** pickup, handoffs, scans and delivery, with who released and received it, signatures, and temperatures (°F readings are converted to °C).
+- **Chain-of-hands diagram:** a strip above each timeline showing every person who held the shipment, in order. Signed handoffs are green, unsigned ones are red, and a dashed red link marks a break where someone had it with no recorded handoff.
 - **Flags problems, most serious first:**
-  - Temperature above or below the allowed range for that type of item
+  - **How long** an item was out of its temperature range, not just whether one reading was off. The time is estimated between readings and compared with the allowance for that kind of item (for example, 30 minutes above 8°C for refrigerated items), the way pharmacies decide whether to keep or discard a product.
   - Pickups, handoffs or deliveries that weren't signed, or have no signature recorded
   - **Custody breaks**, where someone has the item with no recorded handoff
   - Stretches of time with no log entry
   - Late or missing delivery confirmations
   - Temperature-controlled shipments with no readings
   - Problems only visible in the text, like a torn seal, leak or wrong address
+- **Wait time at every pickup and delivery,** with the reason: no authorized person to release or receive it, or the pickup or receiving end wasn't ready. Waits are recorded every day, flagged as exceptions when they're over your limit (15 minutes by default), and never blamed on the driver. A **location ranking** for the day, 7 days, 30 days or all time shows which sites cost the most waiting, split into pickup and delivery, with a goal of near 0. A wait-time CSV with minutes over the limit supports wait-time billing.
+- **Deviation report drafts:** for any critical exception, Claude drafts a formal report (description, timeline, impact assessment, possible contributing factors as questions, corrective and preventive actions, sign-off) for a supervisor to complete. It works without an API key as a structured template.
 - **Review and close exceptions:** mark each one Open, Resolved or Not an issue, with a note on what was done. Review notes are saved with the report and included in every export, which gives you an audit trail.
 - **Email each person their own exceptions,** translated by Claude into their preferred language, with ready-to-send drafts in your own email app. Supervisors get the full report, including review notes.
-- **Weekly exception digest** across saved reports: the most common issues, the people most often involved, and critical issues still open. Email it to supervisors, or add a Monday calendar reminder.
+- **Weekly exception digest** across saved reports: the most common issues, the people most often involved, wait time by location, and critical issues still open. Email it to supervisors, or add a Monday calendar reminder.
 - **Team roster and saved reports:** drivers and supervisors with emails and languages, and a history of past reports to reopen. Everything stays in the browser; a backup file moves it between devices.
 - **Exports for follow-up:** copy an incident report, paste exceptions into Google Sheets or Excel, download exception and full-timeline CSVs, or print to PDF.
 - **Adjustable rules:** temperature ranges per category, how much unaccounted time to allow, and a grace period for lateness. Changes rerun the checks instantly.
@@ -51,13 +54,14 @@ Your key stays in the browser tab and is never saved. Logs go directly to Anthro
 
 ## Default temperature ranges
 
-| Category | Range |
-|---|---|
-| Refrigerated (insulin, vaccines) | 2 to 8°C |
-| Frozen | at or below −15°C |
-| Room temperature, controlled substances, ambient specimens | 15 to 30°C |
+| Category | Range | Allowed time out of range |
+|---|---|---|
+| Refrigerated (insulin, vaccines) | 2 to 8°C | 30 min |
+| Frozen | at or below −15°C | none |
+| Room temperature, controlled substances | 15 to 30°C | 120 min |
+| Ambient lab specimens | 15 to 30°C | 60 min |
 
-These are common defaults, not regulatory advice. Every range is editable, so set them to match your own SOPs.
+These are starting points, not regulatory advice. Every range and allowance is editable, so set them from your SOPs or the manufacturer's stability data. Time out of range assumes temperature changed steadily between readings; more frequent readings give a more accurate estimate.
 
 ## Privacy
 
