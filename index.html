@@ -298,11 +298,18 @@
           <h3>Email each person their exceptions</h3>
           <p class="hint" style="margin:4px 0 0">Only open exceptions are included. Emails are translated into each person's language using your API key.</p>
           <div id="sendRows"></div>
+          <div class="btns" style="margin-top:12px">
+            <button class="small" id="addRecipient">+ Add someone</button>
+          </div>
+          <p class="hint" style="margin:6px 0 0">Add anyone else who should get the full report, like a site manager, QA lead or client contact.</p>
         </div>
         <div class="card" style="border:1px solid var(--line); border-radius:10px; padding:14px; background:var(--soft)">
           <h3>Supervisors</h3>
           <p class="hint" style="margin:4px 0 10px" id="supNote"></p>
-          <button class="small primary" id="emailReport">Email full report to supervisors</button>
+          <div class="btns">
+            <button class="small primary" id="emailReport">Email full report to supervisors</button>
+            <button class="small" id="addSupervisor">+ Add supervisor</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1093,19 +1100,43 @@ function peopleWithIssues() {
   }));
   return [...map.values()].sort((a, b) => b.items.length - a.items.length);
 }
-function renderSend() {
+/* Extra recipients (no exceptions of their own) are saved with the report */
+function extras() { report.extras = report.extras || (report.entry ? (report.entry.extras = report.entry.extras || []) : []); return report.extras; }
+function sendList() {
   const list = peopleWithIssues();
+  const have = new Set(list.map(p => p.name.toLowerCase()));
+  extras().forEach((name, xi) => { if (!name || !have.has(name.toLowerCase())) list.push({ name, items: [], extra: true, xi }); });
+  return list;
+}
+function renderSend() {
+  const list = sendList();
   $("sendRows").innerHTML = list.length ? list.map((p, i) => {
     const rec = findPerson(p.name) || {};
     const c = p.items.filter(f => f.severity === "critical").length;
-    return `<div class="send-row">
-      <div class="who"><b>${escapeHtml(p.name)}</b><span>${p.items.length} open${c ? `, ${c} critical` : ""}</span></div>
-      <input type="email" data-pe="${escapeHtml(p.name)}" value="${escapeHtml(rec.email || "")}" placeholder="email" aria-label="${escapeHtml(p.name)} email">
-      <select data-pl="${escapeHtml(p.name)}" aria-label="${escapeHtml(p.name)} language">${langOptions(rec.language)}</select>
-      <button class="small" data-send="${i}">Email</button></div>`;
-  }).join("") : '<p class="hint" style="margin:10px 0 0">No open exceptions are tied to a person.</p>';
+    const dis = p.extra && !p.name ? "disabled" : "";
+    const who = p.extra
+      ? `<div class="who" style="display:flex; gap:6px; align-items:center"><input type="text" list="peopleNames" data-xname="${p.xi}" value="${escapeHtml(p.name)}" placeholder="Name" aria-label="Name"><button class="x" data-xdel="${p.xi}" aria-label="Remove">×</button></div>`
+      : `<div class="who"><b>${escapeHtml(p.name)}</b><span>${p.items.length} open${c ? `, ${c} critical` : ""}</span></div>`;
+    return `<div class="send-row">${who}
+      <input type="email" data-pe="${escapeHtml(p.name)}" value="${escapeHtml(rec.email || "")}" placeholder="email" aria-label="${escapeHtml(p.name || "New person")} email" ${dis}>
+      <select data-pl="${escapeHtml(p.name)}" aria-label="${escapeHtml(p.name || "New person")} language" ${dis}>${langOptions(rec.language)}</select>
+      <button class="small" data-send="${i}" ${dis}>Email</button></div>`;
+  }).join("") + `<datalist id="peopleNames">${people.map(x => `<option value="${escapeHtml(x.name)}">`).join("")}</datalist>`
+    : '<p class="hint" style="margin:10px 0 0">No open exceptions are tied to a person. Use "+ Add someone" to send the report.</p>';
   renderSupNote();
 }
+function saveExtras() { if (report.entry) { report.entry.extras = report.extras; saveHistory(); } }
+$("addRecipient").addEventListener("click", () => {
+  if (!report) return;
+  extras().push(""); renderSend();
+  const ins = $("sendRows").querySelectorAll("input[data-xname]"); ins[ins.length - 1]?.focus();
+});
+$("addSupervisor").addEventListener("click", () => {
+  $("teamPanel").open = true;
+  people.push({ name: "", email: "", language: "English", role: "supervisor" }); savePeople(); renderPeople();
+  $("teamPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+  const ins = $("people").querySelectorAll("input[data-f=name]"); setTimeout(() => ins[ins.length - 1]?.focus(), 300);
+});
 function renderSupNote() {
   const sup = supervisors();
   $("supNote").innerHTML = sup.length
@@ -1113,20 +1144,31 @@ function renderSupNote() {
     : 'Mark someone as <b>Supervisor</b> under "Team &amp; saved reports" to send them reports and the weekly digest.';
 }
 $("sendRows").addEventListener("change", (e) => {
-  if (e.target.dataset.pe) upsertPerson(e.target.dataset.pe, { email: e.target.value.trim() });
-  if (e.target.dataset.pl) upsertPerson(e.target.dataset.pl, { language: e.target.value });
+  const d = e.target.dataset;
+  if (d.pe) upsertPerson(d.pe, { email: e.target.value.trim() });
+  if (d.pl) upsertPerson(d.pl, { language: e.target.value });
+  if (d.xname !== undefined) {
+    const name = e.target.value.trim();
+    extras()[Number(d.xname)] = name; saveExtras();
+    if (name && !findPerson(name)) upsertPerson(name, { role: "other" });
+    setTimeout(() => { renderSend(); const em = $("sendRows").querySelector(`input[data-pe="${CSS.escape(name)}"]`); if (em && !em.value) em.focus(); }, 0);
+  }
 });
+function recapEmail(p) {
+  return { subject: reportTitle(), body: `Hi ${p.name.split(" ")[0]},\n\nHere is the chain-of-custody report for ${dateLabel(report.logDate)}.\n\n${plainReport()}\n\nThank you!` };
+}
 $("sendRows").addEventListener("click", async (e) => {
+  if (e.target.dataset.xdel !== undefined) { extras().splice(Number(e.target.dataset.xdel), 1); saveExtras(); renderSend(); return; }
   const i = e.target.dataset.send; if (i === undefined) return;
-  const p = peopleWithIssues()[Number(i)], rec = findPerson(p.name) || {};
-  let mail = personEmail(p);
+  const p = sendList()[Number(i)], rec = findPerson(p.name) || {};
+  let mail = p.items.length ? personEmail(p) : recapEmail(p);
   if (rec.language && rec.language !== "English") {
     const key = $("key").value.trim();
     if (!key) return setStatus(`Add your API key above to translate into ${rec.language}, or set ${p.name}'s language to English.`, true);
     e.target.disabled = true; setStatus(`Translating ${p.name}'s email into ${rec.language}…`);
     try {
-      const sys = `Translate the email the user gives you into ${rec.language}. Keep it respectful, plain and natural for a driver or courier. Keep names, IDs, times, temperatures and numbers exactly as written. Return ONLY JSON: {"subject": string, "body": string}`;
-      mail = parseJson(await callClaude(key, sys, `Subject: ${mail.subject}\n\n${mail.body}`, 2000));
+      const sys = `Translate the email the user gives you into ${rec.language}. Keep it respectful, plain and natural for the reader. Keep names, IDs, times, temperatures and numbers exactly as written. Return ONLY JSON: {"subject": string, "body": string}`;
+      mail = parseJson(await callClaude(key, sys, `Subject: ${mail.subject}\n\n${mail.body}`, 6000));
       setStatus(`Opened ${p.name}'s email in ${rec.language}.`);
     } catch (err) { setStatus(err.message, true); e.target.disabled = false; return; }
     e.target.disabled = false;
